@@ -1,0 +1,116 @@
+import axios from 'axios'
+
+// In dev, leave VITE_API_URL empty and let the Vite proxy forward /api to the
+// backend. In production, set VITE_API_URL to the backend origin.
+const baseURL = import.meta.env.VITE_API_URL || ''
+
+const client = axios.create({
+  baseURL,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 120000, // scraping can be slow
+})
+
+// Normalize errors so the UI gets a readable message regardless of shape.
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const detail = error.response?.data?.detail
+    let message
+    if (Array.isArray(detail)) {
+      // FastAPI validation errors: [{ loc, msg, type }, ...]
+      message = detail.map((d) => d.msg).join(', ')
+    } else if (typeof detail === 'string') {
+      message = detail
+    } else {
+      message = error.message || 'An unexpected error occurred'
+    }
+    return Promise.reject(new Error(message))
+  }
+)
+
+// ============== SHOES ==============
+export const shoesApi = {
+  list: (params) => client.get('/api/shoes/', { params }).then((r) => r.data),
+  get: (id) => client.get(`/api/shoes/${id}`).then((r) => r.data),
+  create: (data) => client.post('/api/shoes/', data).then((r) => r.data),
+  update: (id, data) => client.put(`/api/shoes/${id}`, data).then((r) => r.data),
+  remove: (id) => client.delete(`/api/shoes/${id}`).then((r) => r.data),
+  priceHistory: (id, limit = 100) =>
+    client.get(`/api/shoes/${id}/prices`, { params: { limit } }).then((r) => r.data),
+  testScrapability: (brand, model) =>
+    client.post('/api/shoes/test', { brand, model }).then((r) => r.data),
+}
+
+// ============== RETAILERS ==============
+export const retailersApi = {
+  list: (params) => client.get('/api/retailers/', { params }).then((r) => r.data),
+  get: (id) => client.get(`/api/retailers/${id}`).then((r) => r.data),
+  create: (data) => client.post('/api/retailers/', data).then((r) => r.data),
+  update: (id, data) =>
+    client.put(`/api/retailers/${id}`, data).then((r) => r.data),
+  remove: (id) => client.delete(`/api/retailers/${id}`).then((r) => r.data),
+  promos: (id, isActive = true) =>
+    client
+      .get(`/api/retailers/${id}/promos`, { params: { is_active: isActive } })
+      .then((r) => r.data),
+  addPromo: (id, data) =>
+    client.post(`/api/retailers/${id}/promos`, data).then((r) => r.data),
+  deletePromo: (promoId) =>
+    client.delete(`/api/retailers/promos/${promoId}`).then((r) => r.data),
+}
+
+// ============== EXPORT ==============
+export const exportApi = {
+  // Returns seed_data.py source as plain text.
+  seedData: () =>
+    client.get('/api/export/seed-data', { responseType: 'text' }).then((r) => r.data),
+}
+
+// ============== DEALS ==============
+export const dealsApi = {
+  list: (params) => client.get('/api/deals/', { params }).then((r) => r.data),
+  get: (id) => client.get(`/api/deals/${id}`).then((r) => r.data),
+  deactivate: (id) =>
+    client.put(`/api/deals/${id}/deactivate`).then((r) => r.data),
+  forShoe: (shoeId, params) =>
+    client.get(`/api/deals/shoe/${shoeId}`, { params }).then((r) => r.data),
+  forRetailer: (retailerId, params) =>
+    client.get(`/api/deals/retailer/${retailerId}`, { params }).then((r) => r.data),
+}
+
+// ============== DASHBOARD ==============
+export const dashboardApi = {
+  stats: () => client.get('/api/dashboard/stats').then((r) => r.data),
+  recentDeals: (limit = 10) =>
+    client.get('/api/dashboard/recent-deals', { params: { limit } }).then((r) => r.data),
+  bestDeals: (limit = 10) =>
+    client.get('/api/dashboard/best-deals', { params: { limit } }).then((r) => r.data),
+}
+
+// ============== SCRAPING ==============
+export const scrapeApi = {
+  all: (retailerIds) =>
+    client
+      .post('/api/scrape/all', null, {
+        params: retailerIds ? { retailer_ids: retailerIds } : undefined,
+      })
+      .then((r) => r.data),
+  shoe: (shoeId, retailerIds) =>
+    client
+      .post(`/api/scrape/shoe/${shoeId}`, null, {
+        params: retailerIds ? { retailer_ids: retailerIds } : undefined,
+      })
+      .then((r) => r.data),
+  retailer: (retailerId, shoeIds) =>
+    client
+      .post(`/api/scrape/retailer/${retailerId}`, null, {
+        params: shoeIds ? { shoe_ids: shoeIds } : undefined,
+      })
+      .then((r) => r.data),
+  detectPromos: (retailerId) =>
+    client.post(`/api/scrape/promos/${retailerId}`).then((r) => r.data),
+  detectAllPromos: () =>
+    client.post('/api/scrape/promos').then((r) => r.data),
+}
+
+export default client

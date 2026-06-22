@@ -1,0 +1,257 @@
+import { useMemo, useState } from 'react'
+import { Tag, SlidersHorizontal } from 'lucide-react'
+import PageHeader from '@/components/PageHeader'
+import ShoeProductCard from '@/components/ShoeProductCard'
+import DealDetailModal from '@/components/DealDetailModal'
+import ScrapeButton from '@/components/ScrapeButton'
+import { Card, CardContent } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
+import { useDeals, useShoes, useRetailers } from '@/hooks/useApi'
+
+const SORTS = {
+  savings_desc: (a, b) => b.savings_percent - a.savings_percent,
+  price_asc: (a, b) => a.current_price - b.current_price,
+  price_desc: (a, b) => b.current_price - a.current_price,
+  recent: (a, b) => new Date(b.detected_at) - new Date(a.detected_at),
+}
+
+const ALL = '__all__'
+
+export default function Deals() {
+  const [brand, setBrand] = useState(ALL)
+  const [retailerId, setRetailerId] = useState(ALL)
+  const [minSavings, setMinSavings] = useState('')
+  const [size, setSize] = useState(ALL)
+  const [sort, setSort] = useState('savings_desc')
+  const [selected, setSelected] = useState(null)
+
+  // Server-side filters the API supports directly.
+  const params = useMemo(() => {
+    const p = { is_active: true }
+    if (brand !== ALL) p.brand = brand
+    const min = parseFloat(minSavings)
+    if (!Number.isNaN(min) && min > 0) p.min_savings_percent = min
+    return p
+  }, [brand, minSavings])
+
+  const deals = useDeals(params)
+  const shoes = useShoes()
+  const retailers = useRetailers()
+
+  // Distinct brands for the filter dropdown, derived from tracked shoes.
+  const brands = useMemo(() => {
+    const set = new Set((shoes.data || []).map((s) => s.brand))
+    return Array.from(set).sort()
+  }, [shoes.data])
+
+  // Distinct sizes for the filter dropdown, derived from the deals already
+  // fetched (sizes_available is cached at scrape time — picking a size never
+  // triggers another scrape). Deals scraped before size tracking was added
+  // have no sizes_available and are simply excluded once a size is chosen.
+  const sizes = useMemo(() => {
+    const set = new Set()
+    for (const d of deals.data || []) {
+      for (const s of d.sizes_available || []) set.add(s)
+    }
+    return Array.from(set).sort((a, b) => parseFloat(a) - parseFloat(b))
+  }, [deals.data])
+
+  // Retailer/size filtering + sorting happen client-side.
+  const visible = useMemo(() => {
+    let list = deals.data || []
+    if (retailerId !== ALL) {
+      list = list.filter((d) => String(d.retailer_id) === retailerId)
+    }
+    if (size !== ALL) {
+      list = list.filter((d) => (d.sizes_available || []).includes(size))
+    }
+    return [...list].sort(SORTS[sort])
+  }, [deals.data, retailerId, size, sort])
+
+  // Consolidate colorways/retailers: one card per tracked shoe. Groups inherit
+  // the sorted order of `visible`, so each group's first (best) deal also orders
+  // the groups by the chosen sort.
+  const groups = useMemo(() => {
+    const map = new Map()
+    for (const d of visible) {
+      if (!map.has(d.shoe_id)) {
+        map.set(d.shoe_id, { shoeId: d.shoe_id, shoe: d.shoe || {}, deals: [] })
+      }
+      map.get(d.shoe_id).deals.push(d)
+    }
+    return Array.from(map.values())
+  }, [visible])
+
+  const resetFilters = () => {
+    setBrand(ALL)
+    setRetailerId(ALL)
+    setMinSavings('')
+    setSize(ALL)
+    setSort('savings_desc')
+  }
+
+  const hasFilters =
+    brand !== ALL ||
+    retailerId !== ALL ||
+    minSavings !== '' ||
+    size !== ALL ||
+    sort !== 'savings_desc'
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Deals"
+        description="Active deals across all tracked shoes and retailers."
+      >
+        <ScrapeButton variant="outline" />
+      </PageHeader>
+
+      <Card>
+        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label>Brand</Label>
+            <Select value={brand} onValueChange={setBrand}>
+              <SelectTrigger>
+                <SelectValue placeholder="All brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All brands</SelectItem>
+                {brands.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {b}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Retailer</Label>
+            <Select value={retailerId} onValueChange={setRetailerId}>
+              <SelectTrigger>
+                <SelectValue placeholder="All retailers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All retailers</SelectItem>
+                {(retailers.data || []).map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Size</Label>
+            <Select value={size} onValueChange={setSize}>
+              <SelectTrigger>
+                <SelectValue placeholder="All sizes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All sizes</SelectItem>
+                {sizes.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Min. savings %</Label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              placeholder="e.g. 20"
+              value={minSavings}
+              onChange={(e) => setMinSavings(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Sort by</Label>
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="savings_desc">Highest savings</SelectItem>
+                <SelectItem value="price_asc">Lowest price</SelectItem>
+                <SelectItem value="price_desc">Highest price</SelectItem>
+                <SelectItem value="recent">Most recent</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {hasFilters && (
+            <div className="flex items-end lg:col-span-4">
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                <SlidersHorizontal className="h-4 w-4" /> Clear filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {deals.isLoading ? (
+        <CardSkeletonGrid count={6} />
+      ) : deals.isError ? (
+        <ErrorState error={deals.error} onRetry={deals.refetch} />
+      ) : groups.length ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            {groups.length} shoe{groups.length === 1 ? '' : 's'} · {visible.length} deal
+            {visible.length === 1 ? '' : 's'}
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {groups.map((group) => (
+              <ShoeProductCard
+                key={group.shoeId}
+                group={group}
+                onViewDetails={(deal) => setSelected(deal)}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <EmptyState
+          icon={Tag}
+          title={hasFilters ? 'No deals match your filters' : 'No active deals'}
+          description={
+            hasFilters
+              ? 'Try widening or clearing the filters.'
+              : 'Run a scrape to detect deals on your tracked shoes.'
+          }
+          action={
+            hasFilters ? (
+              <Button variant="outline" size="sm" onClick={resetFilters}>
+                Clear filters
+              </Button>
+            ) : (
+              <ScrapeButton />
+            )
+          }
+        />
+      )}
+
+      <DealDetailModal
+        deal={selected}
+        open={!!selected}
+        onOpenChange={(o) => !o && setSelected(null)}
+      />
+    </div>
+  )
+}

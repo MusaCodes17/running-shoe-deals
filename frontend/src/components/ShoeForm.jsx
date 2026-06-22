@@ -1,0 +1,179 @@
+import { useState } from 'react'
+import { FlaskConical } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { DialogFooter } from '@/components/ui/dialog'
+import ScrapabilityTestModal from '@/components/ScrapabilityTestModal'
+import { useTestShoeScrapability } from '@/hooks/useApi'
+
+const empty = {
+  brand: '',
+  model: '',
+  target_price: '',
+  notes: '',
+  is_active: true,
+}
+
+/**
+ * Controlled form for creating/editing a shoe.
+ * `onSubmit(payload, { scrapeAfterSave })` receives a cleaned object;
+ * `submitting` disables it.
+ */
+export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
+  const [values, setValues] = useState(() => ({
+    ...empty,
+    ...(initial
+      ? {
+          brand: initial.brand ?? '',
+          model: initial.model ?? '',
+          target_price: initial.target_price ?? '',
+          notes: initial.notes ?? '',
+          is_active: initial.is_active ?? true,
+        }
+      : {}),
+  }))
+  const [errors, setErrors] = useState({})
+  const [testModalOpen, setTestModalOpen] = useState(false)
+  const testMutation = useTestShoeScrapability()
+
+  const set = (key) => (e) =>
+    setValues((v) => ({ ...v, [key]: e.target.value }))
+
+  const validate = () => {
+    const next = {}
+    if (!values.brand.trim()) next.brand = 'Brand is required'
+    if (!values.model.trim()) next.model = 'Model is required'
+    const price = parseFloat(values.target_price)
+    if (!values.target_price || Number.isNaN(price) || price <= 0)
+      next.target_price = 'Enter a price greater than 0'
+    setErrors(next)
+    return Object.keys(next).length === 0
+  }
+
+  const buildPayload = () => ({
+    brand: values.brand.trim(),
+    model: values.model.trim(),
+    target_price: parseFloat(values.target_price),
+    notes: values.notes.trim() || null,
+    is_active: values.is_active,
+  })
+
+  const submit = (scrapeAfterSave = false) => {
+    if (!validate()) return
+    onSubmit(buildPayload(), { scrapeAfterSave })
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    submit(false)
+  }
+
+  const handleTest = () => {
+    const next = {}
+    if (!values.brand.trim()) next.brand = 'Brand is required'
+    if (!values.model.trim()) next.model = 'Model is required'
+    setErrors(next)
+    if (Object.keys(next).length) return
+    setTestModalOpen(true)
+    testMutation.mutate({ brand: values.brand.trim(), model: values.model.trim() })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Brand" error={errors.brand}>
+          <Input
+            value={values.brand}
+            onChange={set('brand')}
+            placeholder="Nike"
+          />
+        </Field>
+        <Field label="Model" error={errors.model}>
+          <Input
+            value={values.model}
+            onChange={set('model')}
+            placeholder="Vaporfly 3"
+          />
+        </Field>
+        <Field label="Target price (CAD)" error={errors.target_price}>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={values.target_price}
+            onChange={set('target_price')}
+            placeholder="180"
+          />
+        </Field>
+      </div>
+
+      <Field label="Notes">
+        <Textarea
+          value={values.notes}
+          onChange={set('notes')}
+          placeholder="Optional — e.g. only interested in white colorway"
+        />
+      </Field>
+
+      <div className="flex items-center justify-between rounded-md border p-3">
+        <div>
+          <Label className="text-sm font-medium">Actively monitor</Label>
+          <p className="text-xs text-muted-foreground">
+            Include this shoe in scrapes and deal detection.
+          </p>
+        </div>
+        <Switch
+          checked={values.is_active}
+          onCheckedChange={(checked) =>
+            setValues((v) => ({ ...v, is_active: checked }))
+          }
+        />
+      </div>
+
+      <Button type="button" variant="outline" className="w-full" onClick={handleTest}>
+        <FlaskConical className="h-4 w-4" /> Test scrapability
+      </Button>
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={submitting}>
+          {submitting ? 'Saving…' : initial ? 'Save changes' : 'Add shoe'}
+        </Button>
+      </DialogFooter>
+
+      <ScrapabilityTestModal
+        open={testModalOpen}
+        onOpenChange={setTestModalOpen}
+        shoeLabel={`${values.brand} ${values.model}`.trim()}
+        loading={testMutation.isPending}
+        error={testMutation.isError ? testMutation.error.message : null}
+        result={testMutation.data}
+        onModifyName={() => setTestModalOpen(false)}
+        onProceedAnyway={() => {
+          setTestModalOpen(false)
+          submit(false)
+        }}
+        onSaveAndScrape={() => {
+          setTestModalOpen(false)
+          submit(true)
+        }}
+        savingAndScraping={submitting}
+      />
+    </form>
+  )
+}
+
+function Field({ label, error, children }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
+}
