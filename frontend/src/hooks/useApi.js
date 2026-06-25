@@ -6,6 +6,7 @@ import {
   dashboardApi,
   scrapeApi,
   ownedShoesApi,
+  corosSyncApi,
 } from '@/services/api'
 
 // Centralized query keys so mutations can invalidate precisely.
@@ -23,6 +24,7 @@ export const queryKeys = {
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
   shoeNotes: (id) => ['owned-shoes', id, 'notes'],
+  corosSyncStatus: () => ['coros', 'sync-status'],
 }
 
 // ============== SHOES ==============
@@ -307,6 +309,31 @@ export function useDeleteShoeRun() {
       // on success, or quietly corrects it if the delete failed.
       qc.invalidateQueries({ queryKey: ['owned-shoes'] })
       qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(run.owned_shoe_id) })
+    },
+  })
+}
+
+// ============== COROS SYNC ==============
+export function useCorosSyncStatus() {
+  return useQuery({
+    queryKey: queryKeys.corosSyncStatus(),
+    queryFn: () => corosSyncApi.status(),
+  })
+}
+
+export function useFetchCorosRuns() {
+  return useMutation({
+    mutationFn: (daysBack) => corosSyncApi.fetch(daysBack),
+  })
+}
+
+export function useConfirmCorosRuns() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (assignments) => corosSyncApi.confirm(assignments),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['owned-shoes'] })
+      qc.invalidateQueries({ queryKey: queryKeys.corosSyncStatus() })
     },
   })
 }

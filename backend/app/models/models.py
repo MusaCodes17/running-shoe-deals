@@ -195,9 +195,9 @@ class OwnedShoe(Base):
 class ShoeRun(Base):
     """
     A single run logged against an owned shoe, accumulating its mileage.
-    `source` distinguishes manually-logged runs from ones pulled in from
-    COROS (not wired up yet — the column exists so that can slot in later
-    without a schema change).
+    `source` distinguishes manually-logged runs from COROS-imported ones.
+    `coros_activity_id` stores the COROS labelId for deduplication — None
+    for manual runs.
     """
     __tablename__ = "shoe_runs"
 
@@ -206,6 +206,7 @@ class ShoeRun(Base):
     distance_km = Column(Float, nullable=False)
     run_date = Column(Date, nullable=False)
     source = Column(String(20), nullable=False, default="manual")  # manual | coros
+    coros_activity_id = Column(String(100), nullable=True, index=True)
     avg_pace = Column(String(20), nullable=True)  # e.g. "4:35/km"
     avg_hr = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
@@ -239,3 +240,17 @@ class ShoeNote(Base):
 
     def __repr__(self):
         return f"<ShoeNote shoe={self.owned_shoe_id} @ {self.mileage_at_note}km>"
+
+
+class AppSettings(Base):
+    """
+    Simple key/value store for app-level state that doesn't belong in a
+    dedicated table. Currently used to track `last_coros_sync_at`.
+    """
+    __tablename__ = "app_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return f"<AppSettings {self.key}={self.value!r}>"

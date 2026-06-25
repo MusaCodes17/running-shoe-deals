@@ -16,11 +16,13 @@ from typing import List, Optional
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import desc, func
 
-from datetime import date as date_type
+from datetime import date as date_type, datetime, timezone
 
+from app.coros_client import activity_to_run_dict, fetch_running_activities, get_coros_config
 from app.database import SessionLocal
-from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
+from app.models.models import AppSettings, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.routers.owned_shoes import _compute_lifetime_stats
+from app.routers.coros_sync import _get_setting, _is_already_logged, _set_setting
 from app.scrapers.scraper_manager import ScraperManager
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -508,6 +510,135 @@ def add_shoe_note(owned_shoe_id: int, body: str) -> dict:
         db.commit()
         db.refresh(note)
         return {"success": True, "note": _shoe_note_to_dict(note)}
+
+
+@mcp.tool()
+def get_coros_sync_status() -> dict:
+    """
+    Check whether COROS credentials are configured and when the last sync
+    ran. Use this before fetch_unsynced_coros_runs to confirm sync is
+    available.
+    """
+    config = get_coros_config()
+    with get_session() as db:
+        last_sync_str = _get_setting(db, "last_coros_sync_at")
+    return {
+        "coros_configured": config is not None,
+        "last_sync_at": last_sync_str,
+        "message": (
+            "COROS sync is ready. Call fetch_unsynced_coros_runs to pull recent runs."
+            if config
+            else "COROS sync not configured. Add COROS_ACCESS_TOKEN and COROS_OPEN_ID to your .env."
+        ),
+    }
+
+
+@mcp.tool()
+def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
+    """
+    Fetch recent runs from the COROS API that haven't been logged yet.
+    Returns a list of runs for you to present to the user for shoe
+    assignment. After the user assigns shoes, call confirm_coros_run for
+    each one.
+
+    Args:
+        days_back: How many days back to look for runs (default 30).
+            After the first sync, pass a smaller window matching the days
+            since last_sync_at to avoid refetching old history.
+    """
+    config = get_coros_config()
+    if not config:
+        return {
+            "success": False,
+            "coros_configured": False,
+            "error": "COROS sync not configured. Add COROS_ACCESS_TOKEN and COROS_OPEN_ID to your .env.",
+        }
+
+    try:
+        activities = fetch_running_activities(config, days_back)
+    except Exception as exc:
+        return {"success": False, "coros_configured": True, "error": str(exc)}
+
+    with get_session() as db:
+        new_runs = []
+        already_synced = 0
+        for act in activities:
+            run = activity_to_run_dict(act)
+            if _is_already_logged(db, run["coros_activity_id"], run["date"], run["distance_km"]):
+                already_synced += 1
+            else:
+                new_runs.append(run)
+
+    new_runs.sort(key=lambda r: r["date"], reverse=True)
+    return {
+        "success": True,
+        "coros_configured": True,
+        "runs": new_runs,
+        "already_synced": already_synced,
+        "total_fetched": len(activities),
+    }
+
+
+@mcp.tool()
+def confirm_coros_run(
+    coros_activity_id: str,
+    owned_shoe_id: int,
+    date: str,
+    distance_km: float,
+    avg_pace: Optional[str] = None,
+    avg_hr: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> dict:
+    """
+    Log a single COROS run to an owned shoe after the user confirms the
+    assignment. Call this once per run after fetching unsynced runs and
+    getting the user's shoe choice for each.
+
+    Args:
+        coros_activity_id: The COROS labelId for this run.
+        owned_shoe_id: ID of the owned shoe to log it against.
+        date: Run date in YYYY-MM-DD format.
+        distance_km: Distance covered in kilometers.
+        avg_pace: Average pace as "M:SS/km", e.g. "4:32/km".
+        avg_hr: Average heart rate in bpm.
+        notes: Optional notes about this run.
+    """
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+        if not shoe:
+            return {"success": False, "error": f"Owned shoe {owned_shoe_id} not found"}
+
+        if db.query(ShoeRun).filter(ShoeRun.coros_activity_id == coros_activity_id).count():
+            return {"success": False, "error": f"Run {coros_activity_id} is already logged"}
+
+        old_mileage = shoe.current_mileage
+        run = ShoeRun(
+            owned_shoe_id=owned_shoe_id,
+            distance_km=distance_km,
+            run_date=date_type.fromisoformat(date),
+            source="coros",
+            coros_activity_id=coros_activity_id,
+            avg_pace=avg_pace,
+            avg_hr=avg_hr,
+            notes=notes,
+        )
+        db.add(run)
+        shoe.current_mileage += distance_km
+        db.commit()
+        db.refresh(shoe)
+
+        _set_setting(db, "last_coros_sync_at", datetime.now(timezone.utc).isoformat())
+
+        old_cp = int(old_mileage // 100) * 100
+        new_cp = int(shoe.current_mileage // 100) * 100
+        checkpoint_reached = new_cp > old_cp and new_cp > 0
+
+        return {
+            "success": True,
+            "checkpoint_reached": checkpoint_reached,
+            "checkpoint_km": new_cp if checkpoint_reached else None,
+            "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id)),
+        }
 
 
 @mcp.tool()

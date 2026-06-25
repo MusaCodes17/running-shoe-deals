@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, Search, ArrowUpRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, Search, ArrowUpRight, RefreshCw, ChevronDown } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
 import MileageProgressBar from '@/components/MileageProgressBar'
+import CorosSyncModal from '@/components/CorosSyncModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +19,13 @@ import {
 } from '@/components/ui/dialog'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
 import { useToast } from '@/components/ui/toast'
-import { useOwnedShoes, useCreateOwnedShoe, useUpdateOwnedShoe, useDeleteOwnedShoe } from '@/hooks/useApi'
+import {
+  useOwnedShoes,
+  useCreateOwnedShoe,
+  useUpdateOwnedShoe,
+  useDeleteOwnedShoe,
+  useCorosSyncStatus,
+} from '@/hooks/useApi'
 
 const statusVariant = {
   active: 'success',
@@ -38,11 +45,14 @@ export default function MyShoes() {
   const [formState, setFormState] = useState(null) // null | { shoe?: shoe }
   const [deleting, setDeleting] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
+  const [corosSyncOpen, setCorosSyncOpen] = useState(false)
+  const [retiredCollapsed, setRetiredCollapsed] = useState(false)
 
   const shoes = useOwnedShoes()
   const create = useCreateOwnedShoe()
   const update = useUpdateOwnedShoe()
   const remove = useDeleteOwnedShoe()
+  const corosStatus = useCorosSyncStatus()
   const { toast } = useToast()
 
   const filtered = (shoes.data || []).filter((s) => {
@@ -85,6 +95,20 @@ export default function MyShoes() {
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.length}>
+        <Button
+          variant="outline"
+          onClick={() => setCorosSyncOpen(true)}
+          disabled={corosStatus.data && !corosStatus.data.coros_configured}
+          title={
+            corosStatus.data && !corosStatus.data.coros_configured
+              ? 'Add COROS credentials to .env to enable sync'
+              : corosStatus.data?.last_sync_at
+              ? `Last synced ${new Date(corosStatus.data.last_sync_at).toLocaleString()}`
+              : 'Sync runs from COROS watch'
+          }
+        >
+          <RefreshCw className="h-4 w-4" /> Sync from COROS
+        </Button>
         <Button onClick={() => setFormState({})}>
           <Plus className="h-4 w-4" /> Add shoe
         </Button>
@@ -131,22 +155,31 @@ export default function MyShoes() {
           </div>
 
           {retiredShoes.length > 0 && (
-            <div className="space-y-3.5 border-t border-border pt-6">
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
-                Retired
-              </div>
-              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                {retiredShoes.map((shoe) => (
-                  <ShoeCard
-                    key={shoe.id}
-                    shoe={shoe}
-                    onOpenDetail={() => navigate(`/my-shoes/${shoe.id}`)}
-                    onLogRun={() => setLogRunShoe(shoe)}
-                    onEdit={() => setFormState({ shoe })}
-                    onDelete={() => setDeleting(shoe)}
-                  />
-                ))}
-              </div>
+            <div className="border-t border-border pt-6">
+              <button
+                type="button"
+                onClick={() => setRetiredCollapsed((c) => !c)}
+                className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
+              >
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform duration-200 ${retiredCollapsed ? '-rotate-90' : ''}`}
+                />
+                Retired · {retiredShoes.length}
+              </button>
+              {!retiredCollapsed && (
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {retiredShoes.map((shoe) => (
+                    <ShoeCard
+                      key={shoe.id}
+                      shoe={shoe}
+                      onOpenDetail={() => navigate(`/my-shoes/${shoe.id}`)}
+                      onLogRun={() => setLogRunShoe(shoe)}
+                      onEdit={() => setFormState({ shoe })}
+                      onDelete={() => setDeleting(shoe)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -196,6 +229,14 @@ export default function MyShoes() {
         shoe={logRunShoe}
         open={!!logRunShoe}
         onOpenChange={(o) => !o && setLogRunShoe(null)}
+      />
+
+      {/* COROS sync modal */}
+      <CorosSyncModal
+        open={corosSyncOpen}
+        onOpenChange={setCorosSyncOpen}
+        activeShoes={(shoes.data || []).filter((s) => s.status !== 'retired')}
+        lastSyncAt={corosStatus.data?.last_sync_at}
       />
 
       {/* Delete confirmation */}

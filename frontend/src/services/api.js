@@ -129,4 +129,15 @@ export const ownedShoesApi = {
   deleteNote: (noteId) => client.delete(`/api/owned-shoes/notes/${noteId}`).then((r) => r.data),
 }
 
+// ============== COROS SYNC ==============
+export const corosSyncApi = {
+  status: () => client.get('/api/owned-shoes/sync-coros/status').then((r) => r.data),
+  fetch: (daysBack = 30) =>
+    client
+      .post('/api/owned-shoes/sync-coros/fetch', null, { params: { days_back: daysBack } })
+      .then((r) => r.data),
+  confirm: (assignments) =>
+    client.post('/api/owned-shoes/sync-coros/confirm', { assignments }).then((r) => r.data),
+}
+
 export default client
