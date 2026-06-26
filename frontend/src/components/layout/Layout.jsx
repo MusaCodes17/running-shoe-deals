@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Tag, Footprints, Store, Menu, X, PersonStanding } from 'lucide-react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { LayoutDashboard, Tag, Footprints, Store, Menu, X, PersonStanding, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useDashboardStats } from '@/hooks/useApi'
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/shoes', label: 'Tracked Shoes', icon: Footprints },
   { to: '/retailers', label: 'Retailers', icon: Store },
   { to: '/my-shoes', label: 'My Shoes', icon: PersonStanding },
+  { to: '/assistant', label: 'Son of Anton', icon: Sparkles },
 ]
 
 function NavLinks({ onNavigate }) {
@@ -65,6 +66,11 @@ function Brand() {
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const stats = useDashboardStats()
+  const location = useLocation()
+  // Chat manages its own internal scroll regions and needs the full
+  // viewport height with no page padding — every other route gets the
+  // standard padded, naturally-scrolling page wrapper.
+  const isFullBleed = location.pathname === '/assistant'
 
   return (
     <div className="min-h-screen bg-background">
@@ -105,10 +111,14 @@ export default function Layout() {
       )}
 
       {/* Main content */}
-      <main className="md:pl-[236px]">
-        <div className="p-4 sm:p-6 lg:px-[34px] lg:py-[30px]">
+      <main className={cn('md:pl-[236px]', isFullBleed && 'h-screen')}>
+        {isFullBleed ? (
           <Outlet />
-        </div>
+        ) : (
+          <div className="p-4 sm:p-6 lg:px-[34px] lg:py-[30px]">
+            <Outlet />
+          </div>
+        )}
       </main>
     </div>
   )

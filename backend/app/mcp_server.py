@@ -23,7 +23,7 @@ from app.database import SessionLocal
 from app.models.models import AppSettings, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.routers.owned_shoes import _compute_lifetime_stats
 from app.routers.coros_sync import _get_setting, _is_already_logged, _set_setting
-from app.scrapers.scraper_manager import ScraperManager
+from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
 
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
@@ -109,6 +109,32 @@ def get_deals(
 
 
 @mcp.tool()
+def get_shoe_deals(brand: str, model: str) -> List[dict]:
+    """
+    Find all active deals for a specific shoe model, sorted by biggest
+    discount first. Use this when the user asks "are there any deals on
+    my Adios Pro 4?" or "what's the best price on the Vaporfly 3 right now?".
+
+    Args:
+        brand: Shoe brand, e.g. "Adidas" (case-insensitive substring match).
+        model: Shoe model, e.g. "Adizero Adios Pro 4" (case-insensitive substring match).
+    """
+    with get_session() as db:
+        deals = (
+            db.query(Deal)
+            .join(Deal.shoe)
+            .filter(
+                Deal.is_active == True,
+                Shoe.brand.ilike(f"%{brand}%"),
+                Shoe.model.ilike(f"%{model}%"),
+            )
+            .order_by(desc(Deal.savings_percent))
+            .all()
+        )
+        return [_deal_to_dict(d) for d in deals]
+
+
+@mcp.tool()
 def get_shoes(is_active: Optional[bool] = True) -> List[dict]:
     """
     List tracked shoes and their target/retail prices.
@@ -188,19 +214,40 @@ def add_shoe(brand: str, model: str, target_price: float, msrp: Optional[float] 
         msrp: Optional manufacturer's list/retail price, shown alongside
             target_price in the UI so the two aren't confused.
     """
-    with get_session() as db:
-        shoe = Shoe(brand=brand.strip(), model=model.strip(), target_price=target_price, msrp=msrp)
-        db.add(shoe)
-        db.commit()
-        db.refresh(shoe)
-        return {
-            "id": shoe.id,
-            "brand": shoe.brand,
-            "model": shoe.model,
-            "target_price": shoe.target_price,
-            "msrp": shoe.msrp,
-            "is_active": shoe.is_active,
-        }
+    try:
+        with get_session() as db:
+            shoe = Shoe(brand=brand.strip(), model=model.strip(), target_price=target_price, msrp=msrp)
+            db.add(shoe)
+            db.commit()
+            db.refresh(shoe)
+            return {"success": True, "id": shoe.id, "brand": shoe.brand, "model": shoe.model}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def delete_shoe(shoe_id: int) -> dict:
+    """
+    Remove a shoe from deal tracking entirely.
+
+    Deletes the shoe and its associated price records and deals from the
+    tracked-shoes database. This does NOT affect owned_shoes (personal
+    rotation). Use this when you no longer want to monitor a shoe for deals.
+
+    Args:
+        shoe_id: ID of the shoe to delete (from get_shoes).
+    """
+    try:
+        with get_session() as db:
+            shoe = db.query(Shoe).filter(Shoe.id == shoe_id).first()
+            if not shoe:
+                return {"success": False, "error": f"No tracked shoe found with id {shoe_id}"}
+            name = f"{shoe.brand} {shoe.model}"
+            db.delete(shoe)
+            db.commit()
+            return {"success": True, "deleted": name}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
@@ -212,6 +259,10 @@ def trigger_scrape(shoe_id: Optional[int] = None) -> dict:
     shoe across every enabled retailer — which can take a while (it's a
     real, synchronous scrape of live retailer sites, not a queued job).
     Calls the same ScraperManager the REST API's /api/scrape endpoints use.
+    If a scrape is already running (from this tool, the REST API, or the
+    UI), returns success=False immediately rather than starting another
+    one on top of it — do not just retry in a loop; wait and check
+    get_dashboard_stats' last_scrape instead.
 
     Args:
         shoe_id: ID of a specific shoe to scrape (from get_shoes). Omit to
@@ -219,13 +270,17 @@ def trigger_scrape(shoe_id: Optional[int] = None) -> dict:
     """
     with get_session() as db:
         manager = ScraperManager(db)
-        if shoe_id is not None:
-            shoe = db.query(Shoe).filter(Shoe.id == shoe_id).first()
-            if not shoe:
-                return {"success": False, "error": f"Shoe with id {shoe_id} not found"}
-            results = manager.scrape_shoe(shoe_id)
-        else:
-            results = manager.scrape_all_shoes()
+        try:
+            with scrape_guard():
+                if shoe_id is not None:
+                    shoe = db.query(Shoe).filter(Shoe.id == shoe_id).first()
+                    if not shoe:
+                        return {"success": False, "error": f"Shoe with id {shoe_id} not found"}
+                    results = manager.scrape_shoe(shoe_id)
+                else:
+                    results = manager.scrape_all_shoes()
+        except ScrapeInProgressError as e:
+            return {"success": False, "error": str(e)}
         return {"success": True, "results": results}
 
 
@@ -405,36 +460,42 @@ def log_run_to_shoe(
         avg_hr: Optional average heart rate for the run, in beats per minute.
         notes: Optional notes about the run.
     """
-    with get_session() as db:
-        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
-        if not shoe:
-            return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
+    try:
+        with get_session() as db:
+            shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+            if not shoe:
+                return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
 
-        old_mileage = shoe.current_mileage
-        run = ShoeRun(
-            owned_shoe_id=owned_shoe_id,
-            distance_km=distance_km,
-            run_date=date_type.fromisoformat(run_date),
-            source="manual",
-            avg_pace=avg_pace,
-            avg_hr=avg_hr,
-            notes=notes,
-        )
-        db.add(run)
-        shoe.current_mileage += distance_km
-        db.commit()
-        db.refresh(shoe)
+            old_mileage = shoe.current_mileage
+            run = ShoeRun(
+                owned_shoe_id=owned_shoe_id,
+                distance_km=distance_km,
+                run_date=date_type.fromisoformat(run_date),
+                source="manual",
+                avg_pace=avg_pace,
+                avg_hr=avg_hr,
+                notes=notes,
+            )
+            db.add(run)
+            shoe.current_mileage += distance_km
+            db.commit()
+            db.refresh(run)
+            db.refresh(shoe)
 
-        old_checkpoint = int(old_mileage // 100) * 100
-        new_checkpoint = int(shoe.current_mileage // 100) * 100
-        checkpoint_reached = new_checkpoint > old_checkpoint and new_checkpoint > 0
+            old_checkpoint = int(old_mileage // 100) * 100
+            new_checkpoint = int(shoe.current_mileage // 100) * 100
+            checkpoint_reached = new_checkpoint > old_checkpoint and new_checkpoint > 0
 
-        return {
-            "success": True,
-            "checkpoint_reached": checkpoint_reached,
-            "checkpoint_km": new_checkpoint if checkpoint_reached else None,
-            "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id)),
-        }
+            return {
+                "success": True,
+                "run_id": run.id,
+                "shoe": f"{shoe.brand} {shoe.model}",
+                "new_mileage": round(shoe.current_mileage, 2),
+                "checkpoint_reached": checkpoint_reached,
+                "checkpoint_km": new_checkpoint if checkpoint_reached else None,
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
@@ -446,23 +507,26 @@ def delete_shoe_run(run_id: int) -> dict:
     Args:
         run_id: ID of the run to delete (from get_shoe_runs).
     """
-    with get_session() as db:
-        run = db.query(ShoeRun).filter(ShoeRun.id == run_id).first()
-        if not run:
-            return {"success": False, "error": f"Run with id {run_id} not found"}
+    try:
+        with get_session() as db:
+            run = db.query(ShoeRun).filter(ShoeRun.id == run_id).first()
+            if not run:
+                return {"success": False, "error": f"Run with id {run_id} not found"}
 
-        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == run.owned_shoe_id).first()
-        distance = run.distance_km
-        db.delete(run)
-        if shoe:
-            shoe.current_mileage = max(0, shoe.current_mileage - distance)
-        db.commit()
+            shoe = db.query(OwnedShoe).filter(OwnedShoe.id == run.owned_shoe_id).first()
+            distance = run.distance_km
+            db.delete(run)
+            if shoe:
+                shoe.current_mileage = max(0, shoe.current_mileage - distance)
+            db.commit()
 
-        if not shoe:
-            return {"success": True, "shoe": None}
+            if not shoe:
+                return {"success": True, "removed_km": distance, "updated_mileage": 0}
 
-        db.refresh(shoe)
-        return {"success": True, "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id))}
+            db.refresh(shoe)
+            return {"success": True, "removed_km": distance, "updated_mileage": round(shoe.current_mileage, 2)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
@@ -495,21 +559,29 @@ def add_shoe_note(owned_shoe_id: int, body: str) -> dict:
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
         body: The note content.
     """
-    with get_session() as db:
-        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
-        if not shoe:
-            return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
+    try:
+        with get_session() as db:
+            shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+            if not shoe:
+                return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
 
-        note = ShoeNote(
-            owned_shoe_id=owned_shoe_id,
-            body=body,
-            triggered_by="manual",
-            mileage_at_note=shoe.current_mileage,
-        )
-        db.add(note)
-        db.commit()
-        db.refresh(note)
-        return {"success": True, "note": _shoe_note_to_dict(note)}
+            note = ShoeNote(
+                owned_shoe_id=owned_shoe_id,
+                body=body,
+                triggered_by="manual",
+                mileage_at_note=shoe.current_mileage,
+            )
+            db.add(note)
+            db.commit()
+            db.refresh(note)
+            return {
+                "success": True,
+                "note_id": note.id,
+                "shoe": f"{shoe.brand} {shoe.model}",
+                "mileage_at_note": shoe.current_mileage,
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
@@ -650,12 +722,19 @@ def retire_shoe(owned_shoe_id: int) -> dict:
     Args:
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
     """
-    with get_session() as db:
-        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
-        if not shoe:
-            return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
+    try:
+        with get_session() as db:
+            shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+            if not shoe:
+                return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
 
-        shoe.status = "retired"
-        db.commit()
-        db.refresh(shoe)
-        return {"success": True, "shoe": _owned_shoe_to_dict(shoe)}
+            shoe.status = "retired"
+            db.commit()
+            db.refresh(shoe)
+            return {
+                "success": True,
+                "shoe": f"{shoe.brand} {shoe.model}",
+                "final_mileage": round(shoe.current_mileage, 2),
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
