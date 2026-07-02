@@ -151,7 +151,20 @@
       "Bash(chmod 644 ~/.ssh/known_hosts)",
       "Bash(ssh-keyscan -t ed25519,rsa github.com)",
       "Bash(ssh-keygen -F github.com)",
-      "Bash(gh pr create --title 'Add \"My Shoes\" personal rotation tracker' --body ' *)"
+      "Bash(gh pr create --title 'Add \"My Shoes\" personal rotation tracker' --body ' *)",
+      "Bash(git -C /Users/musasouled/workspace/claude-code/running-shoe-deals stash pop)",
+      "Bash(git -C /Users/musasouled/workspace/claude-code/running-shoe-deals log --oneline -5)",
+      "Bash(git -C /Users/musasouled/workspace/claude-code/running-shoe-deals log --oneline origin/main -5)",
+      "Bash(git *)",
+      "Bash(echo \"Frontend PID: $!\")",
+      "Bash(echo \"PID: $!\")",
+      "Bash(echo \"pid $!\")",
+      "Bash(gh pr create --title 'Background scraping with SSE progress + kids-shoe filter' --body ' *)",
+      "Bash(gh pr *)",
+      "Bash(npx --prefix frontend vite --version)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(sqlite3 *)",
+      "Skill(commit-commands:commit)"
     ]
   }
 }

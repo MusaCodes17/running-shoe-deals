@@ -128,12 +128,27 @@ class EnRouteRunScraper(BaseScraper):
             text, re.S,
         )
 
+        # Tokens longer than 2 chars that aren't pure digits — the handle must
+        # contain at least one of these.  Guards against the cross-card pairing
+        # bug where the search-page regex pairs a Zoom Fly 6 href with a
+        # Vaporfly 4 alt-text because re.S lets .*? span multiple product cards.
+        significant_tokens = [
+            t for t in model.lower().split() if len(t) > 2 and not t.isdigit()
+        ]
+
         results = []
         seen_handles = set()
         for href, title in pairs:
             if not self._matches(title, brand, model):
                 continue
             handle = href.rsplit("/products/", 1)[1]
+            if significant_tokens and not any(t in handle for t in significant_tokens):
+                logger.warning(
+                    f"[{self.retailer_name}] Skipping {href}: title '{title}' matched "
+                    f"'{model}' but handle doesn't contain {significant_tokens} — "
+                    f"likely a cross-card URL/title pairing"
+                )
+                continue
             if handle in seen_handles:
                 continue
             seen_handles.add(handle)
