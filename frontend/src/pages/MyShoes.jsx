@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, Search, ArrowUpRight, RefreshCw, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
@@ -8,8 +8,16 @@ import MileageProgressBar from '@/components/MileageProgressBar'
 import CorosSyncModal from '@/components/CorosSyncModal'
 import ShoeTypeBadge from '@/components/ShoeTypeBadge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +35,23 @@ import {
   useDeleteOwnedShoe,
   useCorosSyncStatus,
 } from '@/hooks/useApi'
+import { SHOE_TYPES, SHOE_TYPE_LABELS } from '@/lib/shoeTypes'
+
+const ALL = '__all__'
+
+const MILEAGE_BUCKETS = [
+  { value: 'under_200', label: 'Under 200 km', test: (km) => km < 200 },
+  { value: '200_500', label: '200–500 km', test: (km) => km >= 200 && km < 500 },
+  { value: '500_800', label: '500–800 km', test: (km) => km >= 500 && km < 800 },
+  { value: 'over_800', label: 'Over 800 km', test: (km) => km >= 800 },
+]
+
+const SORTS = {
+  name_asc: { label: 'Name (A–Z)', fn: (a, b) => `${a.brand} ${a.model}`.localeCompare(`${b.brand} ${b.model}`) },
+  mileage_desc: { label: 'Most mileage', fn: (a, b) => b.current_mileage - a.current_mileage },
+  mileage_asc: { label: 'Least mileage', fn: (a, b) => a.current_mileage - b.current_mileage },
+  newest: { label: 'Newest added', fn: (a, b) => new Date(b.created_at) - new Date(a.created_at) },
+}
 
 const statusVariant = {
   active: 'success',
@@ -42,7 +67,10 @@ const statusLabel = {
 
 export default function MyShoes() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const [brand, setBrand] = useState(ALL)
+  const [shoeType, setShoeType] = useState(ALL)
+  const [mileageBucket, setMileageBucket] = useState(ALL)
+  const [sort, setSort] = useState('name_asc')
   const [formState, setFormState] = useState(null) // null | { shoe?: shoe }
   const [deleting, setDeleting] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
@@ -56,15 +84,31 @@ export default function MyShoes() {
   const corosStatus = useCorosSyncStatus()
   const { toast } = useToast()
 
-  const filtered = (shoes.data || []).filter((s) => {
-    const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (
-      s.brand.toLowerCase().includes(q) ||
-      s.model.toLowerCase().includes(q) ||
-      (s.nickname || '').toLowerCase().includes(q)
-    )
-  })
+  const brands = useMemo(() => {
+    const set = new Set((shoes.data || []).map((s) => s.brand))
+    return [...set].sort()
+  }, [shoes.data])
+
+  const hasFilters = brand !== ALL || shoeType !== ALL || mileageBucket !== ALL || sort !== 'name_asc'
+
+  const resetFilters = () => {
+    setBrand(ALL)
+    setShoeType(ALL)
+    setMileageBucket(ALL)
+    setSort('name_asc')
+  }
+
+  const filtered = useMemo(() => {
+    let list = shoes.data || []
+    if (brand !== ALL) list = list.filter((s) => s.brand === brand)
+    if (shoeType !== ALL) list = list.filter((s) => s.shoe_type === shoeType)
+    if (mileageBucket !== ALL) {
+      const bucket = MILEAGE_BUCKETS.find((b) => b.value === mileageBucket)
+      if (bucket) list = list.filter((s) => bucket.test(s.current_mileage))
+    }
+    return [...list].sort(SORTS[sort]?.fn ?? SORTS.name_asc.fn)
+  }, [shoes.data, brand, shoeType, mileageBucket, sort])
+
   const activeShoes = filtered.filter((s) => s.status !== 'retired')
   const retiredShoes = filtered.filter((s) => s.status === 'retired')
 
@@ -95,7 +139,7 @@ export default function MyShoes() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.length}>
+      <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.filter((s) => s.status !== 'retired').length}>
         <Button
           variant="outline"
           onClick={() => setCorosSyncOpen(true)}
@@ -115,15 +159,79 @@ export default function MyShoes() {
         </Button>
       </PageHeader>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Search by brand, model, or nickname…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+      <Card>
+        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label>Brand</Label>
+            <Select value={brand} onValueChange={setBrand}>
+              <SelectTrigger>
+                <SelectValue placeholder="All brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All brands</SelectItem>
+                {brands.map((b) => (
+                  <SelectItem key={b} value={b}>{b}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Shoe type</Label>
+            <Select value={shoeType} onValueChange={setShoeType}>
+              <SelectTrigger>
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All types</SelectItem>
+                {SHOE_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Mileage</Label>
+            <Select value={mileageBucket} onValueChange={setMileageBucket}>
+              <SelectTrigger>
+                <SelectValue placeholder="All mileage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All mileage</SelectItem>
+                {MILEAGE_BUCKETS.map((b) => (
+                  <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Sort by</Label>
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(SORTS).map(([key, { label }]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+        {hasFilters && (
+          <div className="border-t border-border px-4 py-2">
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Reset filters
+            </button>
+          </div>
+        )}
+      </Card>
 
       {shoes.isLoading ? (
         <CardSkeletonGrid count={6} />
@@ -187,14 +295,16 @@ export default function MyShoes() {
       ) : (
         <EmptyState
           icon={Footprints}
-          title={search ? 'No matching shoes' : 'No shoes in rotation yet'}
+          title={hasFilters ? 'No matching shoes' : 'No shoes in rotation yet'}
           description={
-            search
-              ? 'Try a different search.'
+            hasFilters
+              ? 'Try adjusting the filters.'
               : 'Add a shoe to start tracking mileage and run history.'
           }
           action={
-            !search && (
+            hasFilters ? (
+              <Button variant="outline" onClick={resetFilters}>Reset filters</Button>
+            ) : (
               <Button onClick={() => setFormState({})}>
                 <Plus className="h-4 w-4" /> Add shoe
               </Button>
