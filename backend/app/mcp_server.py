@@ -13,7 +13,8 @@ Depends(get_db)) and closes it when done, mirroring get_db's lifecycle.
 from contextlib import contextmanager
 from typing import List, Optional
 
-from mcp.server.fastmcp import FastMCP
+from mcp import types as mcp_types
+from mcp.server.fastmcp import FastMCP, Context
 from sqlalchemy import desc, func
 
 from datetime import date as date_type, datetime, timezone
@@ -262,7 +263,7 @@ def delete_shoe(shoe_id: int) -> dict:
 
 
 @mcp.tool()
-def trigger_scrape(shoe_id: Optional[int] = None) -> dict:
+async def trigger_scrape(ctx: Context, shoe_id: Optional[int] = None) -> dict:
     """
     Scrape retailers for current prices and detect new deals.
 
@@ -292,6 +293,17 @@ def trigger_scrape(shoe_id: Optional[int] = None) -> dict:
                     results = manager.scrape_all_shoes()
         except ScrapeInProgressError as e:
             return {"success": False, "error": str(e)}
+
+        try:
+            deals_found = sum(r.get("deals_found", 0) for r in results if isinstance(r, dict))
+            await ctx.log(
+                "info",
+                f"Scrape completed: {len(results)} shoe(s) scraped, {deals_found} deal(s) found.",
+                logger_name="scraper",
+            )
+        except Exception:
+            pass
+
         return {"success": True, "results": results}
 
 
@@ -451,10 +463,11 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
 
 
 @mcp.tool()
-def log_run_to_shoe(
+async def log_run_to_shoe(
     owned_shoe_id: int,
     distance_km: float,
     run_date: str,
+    ctx: Context,
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
@@ -497,6 +510,29 @@ def log_run_to_shoe(
             new_checkpoint = int(shoe.current_mileage // 100) * 100
             checkpoint_reached = new_checkpoint > old_checkpoint and new_checkpoint > 0
 
+            thresholds = [
+                (600, "approaching end of life — start thinking about replacement"),
+                (700, "consider retiring soon — performance may be degrading"),
+                (800, "past recommended limit — retire this shoe"),
+            ]
+            threshold_crossed = None
+            threshold_message = None
+            for threshold_km, message in thresholds:
+                if old_mileage < threshold_km <= shoe.current_mileage:
+                    threshold_crossed = threshold_km
+                    threshold_message = message
+                    break
+
+            if threshold_crossed is not None:
+                try:
+                    await ctx.log(
+                        "warning",
+                        f"⚠️ {shoe.brand} {shoe.model} has reached {threshold_crossed}km — {threshold_message}.",
+                        logger_name="shoe-tracker",
+                    )
+                except Exception:
+                    pass
+
             return {
                 "success": True,
                 "run_id": run.id,
@@ -504,6 +540,8 @@ def log_run_to_shoe(
                 "new_mileage": round(shoe.current_mileage, 2),
                 "checkpoint_reached": checkpoint_reached,
                 "checkpoint_km": new_checkpoint if checkpoint_reached else None,
+                "threshold_crossed": threshold_crossed,
+                "threshold_message": threshold_message,
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -593,6 +631,121 @@ def add_shoe_note(owned_shoe_id: int, body: str) -> dict:
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
+    """
+    Draft a structured shoe review based on logged notes and run history
+    for a specific owned shoe. Uses MCP sampling to generate the review
+    text via the connected client's LLM — the server sends a sampling
+    request back through the MCP protocol and the client handles the LLM
+    call. Returns a structured review draft ready for editing and posting.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+    """
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+        if not shoe:
+            return {"success": False, "error": "Shoe not found"}
+
+        notes = (
+            db.query(ShoeNote)
+            .filter(ShoeNote.owned_shoe_id == owned_shoe_id)
+            .order_by(ShoeNote.created_at)
+            .all()
+        )
+        if not notes:
+            return {
+                "success": False,
+                "error": "No notes found for this shoe. Add some notes first via add_shoe_note.",
+            }
+
+        runs = (
+            db.query(ShoeRun)
+            .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
+            .order_by(ShoeRun.run_date)
+            .all()
+        )
+
+        stats = _compute_lifetime_stats(db, owned_shoe_id)
+        total_runs = stats.get("total_runs", 0)
+        lifetime_avg_pace = stats.get("lifetime_avg_pace") or "—"
+        lifetime_avg_hr = stats.get("lifetime_avg_hr")
+
+        first_run_date = runs[0].run_date.isoformat() if runs else "—"
+        last_run_date = runs[-1].run_date.isoformat() if runs else "—"
+
+        formatted_notes = "\n".join(
+            f"- [{round(n.mileage_at_note)}km · {n.created_at.strftime('%Y-%m-%d') if n.created_at else '—'}] {n.body}"
+            for n in notes
+        )
+
+        nickname_part = f" ({shoe.nickname})" if shoe.nickname else ""
+        shoe_type = shoe.shoe_type or "unspecified"
+        avg_hr_str = f"{lifetime_avg_hr}bpm" if lifetime_avg_hr else "—"
+
+        context = f"""Shoe: {shoe.brand} {shoe.model}{nickname_part}
+Type: {shoe_type}
+Total distance: {round(shoe.current_mileage, 1)}km over {total_runs} runs
+Period: {first_run_date} to {last_run_date}
+Avg pace: {lifetime_avg_pace} | Avg HR: {avg_hr_str}
+Status: {shoe.status}
+
+Notes logged during use:
+{formatted_notes}"""
+
+        sampling_prompt = f"""Based on the following running shoe data and personal notes, write a structured shoe review suitable for posting on Reddit (r/RunningShoeGeeks or similar subreddit).
+
+{context}
+
+Format the review as:
+## [Shoe Name] Review — [Total Distance]km
+
+**The Shoe:** [1-2 sentence overview]
+
+**What I Used It For:** [workout types based on shoe_type and pace data]
+
+**The Good:** [positive observations from notes]
+
+**The Bad:** [negative observations or limitations from notes]
+
+**Mileage & Durability:** [observations about how it held up]
+
+**Who Is It For:** [recommendation based on shoe_type and experience]
+
+**Verdict:** [1-2 sentence summary and rating /10]
+
+Keep it honest, specific, and useful. Use the notes as the primary source — do not invent observations not present in the notes."""
+
+    try:
+        result = await ctx.session.create_message(
+            messages=[
+                mcp_types.SamplingMessage(
+                    role="user",
+                    content=mcp_types.TextContent(type="text", text=sampling_prompt),
+                )
+            ],
+            max_tokens=1000,
+        )
+        review_text = (
+            result.content.text
+            if isinstance(result.content, mcp_types.TextContent)
+            else str(result.content)
+        )
+        return {
+            "success": True,
+            "shoe": f"{shoe.brand} {shoe.model}",
+            "mileage": round(shoe.current_mileage, 1),
+            "review_draft": review_text,
+            "note": "This is a draft — edit before posting.",
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Connected client does not support sampling. Try this tool from Claude Desktop. ({e})",
+        }
 
 
 @mcp.tool()
@@ -1122,3 +1275,118 @@ def brand_deals_resource(brand: str) -> str:
         markdown = "\n".join(md_lines)
         payload = json.dumps({"brand": brand, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
+@mcp.prompt()
+def sync_coros_runs(days_back: int = 2) -> str:
+    """
+    Sync recent COROS runs and assign them to shoes in your rotation.
+    Fetches unsynced runs, suggests shoe assignments based on pace
+    and distance, and logs confirmed runs after your review.
+    """
+    return f"""# COROS Sync Agent
+
+You are acting as a COROS run sync agent for the Running Shoe Deal
+Finder app. Follow this exact process.
+
+## Step 1 — Fetch recent runs from COROS
+Call querySportRecords with:
+- sportTypeCodes: [100, 101, 102, 103] (all running types)
+- pageSize: 20
+- pageIndex: 1
+- timezone: America/Toronto
+
+This uses the COROS MCP connector directly — do NOT call 
+fetch_unsynced_coros_runs as it requires API credentials 
+that are not configured.
+
+## Step 1b — Check what's already logged
+Call get_shoe_runs for each active owned shoe to get recently 
+logged runs. Use run_date and distance_km to identify which 
+COROS activities have already been logged (match by date and 
+distance within 0.1km tolerance). Exclude already-logged runs 
+from the sync queue.
+
+## Step 2 — Get current rotation
+Call get_owned_shoes to see all active shoes with their shoe_type
+and current mileage.
+
+## Step 3 — Suggest shoe assignment for each run
+For each unsynced run, reason about the best shoe match using BOTH
+signals below — do not rely on pace alone.
+
+### Pace signal (primary)
+- < 3:30/km → favors short_distance_racer or intervals
+- 3:30–4:15/km → favors tempo long_distance_racer or tempo
+- 4:00–4:30/km → favors long_run
+- 4:30–5:30/km → favors daily_trainer
+- > 5:30/km → favors recovery or daily_trainer
+
+### Distance signal (secondary, refines the pace signal)
+- < 5km → favors intervals or short_distance_racer
+- 5–16km → favors daily_trainer
+- 16–22km → favors tempo or daily_trainer
+- > 21km → favors long_run or long_distance_racer
+
+### Resolution
+- If pace and distance signals agree on a shoe_type, that's the
+  suggestion.
+- If they conflict, pick the shoe_type with an active shoe in the
+  rotation, preferring the one with lower current mileage.
+- Only suggest shoes that are status=active. Never suggest a
+  retired shoe.
+- If multiple active shoes share the matched shoe_type, suggest
+  the one with lower mileage (spread wear more evenly).
+- If no shoe in the rotation matches the inferred shoe_type, say so
+  explicitly rather than forcing a bad match.
+
+## Step 4 — Present all suggestions together
+Show every unsynced run with its suggested shoe and a brief reason,
+in a single structured response.
+
+Format:
+"Here are my suggestions for [N] unsynced runs:
+
+[Date] · [distance]km · [pace]/km · [hr]bpm
+→ [Brand Model] ([shoe_type], [current_mileage]km)
+Reason: [one short sentence]
+
+...repeat for each run...
+
+Confirm all, adjust specific runs, or skip any?"
+
+## Step 5 — Wait for user confirmation
+Do not log anything until the user responds. Accept any natural
+language mix of confirmations, changes, and skips. If ambiguous,
+ask for clarification.
+
+## Step 6 — Log confirmed runs
+For each confirmed run call log_run_to_shoe with:
+- owned_shoe_id (the confirmed shoe)
+- distance_km, run_date, avg_pace, avg_hr from COROS data
+- source: "coros"
+- notes: empty unless user specifies
+
+## Step 7 — Summarise results
+"Logged [N] runs:
+- [Shoe name]: +[total km added]km (now [new total]km)
+...
+[Skipped: N runs]"
+
+## Step 8 — Proactive threshold check
+For any shoe that crossed 600km, 700km, or 800km, flag it and offer
+to check replacement deals or add a note.
+
+## General rules
+- Never log a run without explicit user confirmation
+- Never invent data — all run details come from
+  fetch_unsynced_coros_runs
+- If confirm_coros_run returns success: false for any run, report
+  the specific error and continue processing the rest
+- Keep the tone direct and concise — this user is a competitive
+  runner who wants clear information, not chattiness
+"""

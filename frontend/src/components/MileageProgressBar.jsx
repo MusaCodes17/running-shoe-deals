@@ -10,7 +10,7 @@ const LIMIT_KM = 800 // personal race-shoe mileage limit; configurable later
 export default function MileageProgressBar({ mileage, limit = LIMIT_KM, compact = false, className }) {
   const pct = Math.min(100, (mileage / limit) * 100)
   const colorClass =
-    mileage > limit ? 'bg-destructive' : mileage >= limit * 0.625 ? 'bg-warning' : 'bg-success'
+    mileage > limit ? 'bg-destructive' : mileage >= limit * 0.75 ? 'bg-warning' : 'bg-success'
 
   return (
     <div className={cn('space-y-1', className)}>
