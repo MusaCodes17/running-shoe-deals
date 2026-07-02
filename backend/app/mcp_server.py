@@ -524,13 +524,36 @@ async def log_run_to_shoe(
                 except Exception:
                     pass
 
+            thresholds = [
+                (600, "approaching end of life — start thinking about replacement"),
+                (700, "consider retiring soon — performance may be degrading"),
+                (800, "past recommended limit — retire this shoe"),
+            ]
+            threshold_crossed = None
+            threshold_message = None
+            for threshold_km, message in thresholds:
+                if old_mileage < threshold_km <= shoe.current_mileage:
+                    threshold_crossed = threshold_km
+                    threshold_message = message
+                    break
+
+            if threshold_crossed is not None:
+                try:
+                    await ctx.log(
+                        "warning",
+                        f"⚠️ {shoe.brand} {shoe.model} has reached {threshold_crossed}km — {threshold_message}.",
+                        logger_name="shoe-tracker",
+                    )
+                except Exception:
+                    pass
+
             return {
                 "success": True,
                 "run_id": result.run.id,
                 "shoe": f"{shoe.brand} {shoe.model}",
                 "new_mileage": round(shoe.current_mileage, 2),
-                "checkpoint_reached": result.checkpoint_reached,
-                "checkpoint_km": result.checkpoint_km,
+                "checkpoint_reached": checkpoint_reached,
+                "checkpoint_km": new_checkpoint if checkpoint_reached else None,
                 "threshold_crossed": threshold_crossed,
                 "threshold_message": threshold_message,
             }
@@ -645,10 +668,10 @@ async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
             .all()
         )
 
-        stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
-        total_runs = stats.total_runs
-        lifetime_avg_pace = stats.lifetime_avg_pace or "—"
-        lifetime_avg_hr = stats.lifetime_avg_hr
+        stats = _compute_lifetime_stats(db, owned_shoe_id)
+        total_runs = stats.get("total_runs", 0)
+        lifetime_avg_pace = stats.get("lifetime_avg_pace") or "—"
+        lifetime_avg_hr = stats.get("lifetime_avg_hr")
 
         first_run_date = runs[0].run_date.isoformat() if runs else "—"
         last_run_date = runs[-1].run_date.isoformat() if runs else "—"
