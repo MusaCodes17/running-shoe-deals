@@ -26,7 +26,7 @@ plan forbids auto-resolving those without a human decision.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import func
@@ -139,6 +139,26 @@ def plan_backfill(
         .all()
     )
 
+    # Load every unlinked shoe_run once and index by run_date, instead of
+    # issuing 1–2 queries per Strava run. Exact and ±1-day candidate lookups
+    # then hit this dict — identical results, ~2 queries total instead of ~2N.
+    unlinked_runs = (
+        db.query(ShoeRun)
+        .filter(ShoeRun.strava_activity_id.is_(None))
+        .order_by(ShoeRun.id)
+        .all()
+    )
+    runs_by_date: dict[date, list[ShoeRun]] = {}
+    for r in unlinked_runs:
+        runs_by_date.setdefault(r.run_date, []).append(r)
+
+    def _candidates(target_date, dist: float) -> list[ShoeRun]:
+        return [
+            r for r in runs_by_date.get(target_date, [])
+            if r.id not in claimed_run_ids
+            and dist - distance_tol <= r.distance_km <= dist + distance_tol
+        ]
+
     # shoe_runs already claimed by a link this pass (so two Strava runs can't
     # both grab the same existing run).
     claimed_run_ids: set[int] = set()
@@ -155,18 +175,7 @@ def plan_backfill(
         # --- exact-day candidates ---
         exact = []
         if s.run_date is not None and s.distance_km is not None:
-            exact = (
-                db.query(ShoeRun)
-                .filter(
-                    ShoeRun.strava_activity_id.is_(None),
-                    ShoeRun.run_date == s.run_date,
-                    ShoeRun.distance_km.between(
-                        s.distance_km - distance_tol, s.distance_km + distance_tol
-                    ),
-                )
-                .all()
-            )
-            exact = [r for r in exact if r.id not in claimed_run_ids]
+            exact = _candidates(s.run_date, s.distance_km)
 
         if len(exact) == 1:
             run = exact[0]
@@ -192,19 +201,8 @@ def plan_backfill(
         # --- widen ±1 day (date-shift): flag for manual review, never auto-link ---
         shift = []
         if s.run_date is not None and s.distance_km is not None:
-            lo, hi = s.run_date - timedelta(days=1), s.run_date + timedelta(days=1)
-            shift = (
-                db.query(ShoeRun)
-                .filter(
-                    ShoeRun.strava_activity_id.is_(None),
-                    ShoeRun.run_date.between(lo, hi),
-                    ShoeRun.distance_km.between(
-                        s.distance_km - distance_tol, s.distance_km + distance_tol
-                    ),
-                )
-                .all()
-            )
-            shift = [r for r in shift if r.id not in claimed_run_ids]
+            for d in (s.run_date - timedelta(days=1), s.run_date, s.run_date + timedelta(days=1)):
+                shift.extend(_candidates(d, s.distance_km))
 
         if shift:
             report.date_shift.append(_make_link(s, shift[0], gear_shoe_id, "date-shift"))
