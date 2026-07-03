@@ -1168,6 +1168,15 @@ def shoe_detail_resource(shoe_id: int) -> str:
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
+# Run-source badges for the run-history resource. Default (manual) covers any
+# unrecognized source.
+_SOURCE_BADGES = {
+    "coros": "🤖 coros",
+    "strava": "🟠 strava",
+    "manual": "✍ manual",
+}
+
+
 @mcp.resource(
     "shoes://owned/{shoe_id}/runs",
     name="Shoe Run History",
@@ -1203,7 +1212,7 @@ def shoe_runs_resource(shoe_id: int) -> str:
             date_str = r.run_date.strftime("%b %d, %Y") if r.run_date else "—"
             pace = r.avg_pace or "—"
             hr = f"{r.avg_hr}bpm" if r.avg_hr else "—"
-            source_badge = "🤖 coros" if r.source == "coros" else "✍ manual"
+            source_badge = _SOURCE_BADGES.get(r.source, "✍ manual")
             md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
 
         stats = rotation.compute_lifetime_stats(db, shoe_id)
