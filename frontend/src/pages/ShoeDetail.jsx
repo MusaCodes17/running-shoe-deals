@@ -86,7 +86,7 @@ export default function ShoeDetail() {
 
   return (
     <div className="space-y-8">
-      <Link to="/my-shoes" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <Link to="/my-shoes" className="focus-ring rounded inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to My Shoes
       </Link>
 
@@ -124,7 +124,7 @@ export default function ShoeDetail() {
           ) : (
             <div className="text-sm text-faint">
               Purchase price not recorded —{' '}
-              <button type="button" onClick={() => setEditing(true)} className="text-accent-foreground underline">
+              <button type="button" onClick={() => setEditing(true)} className="focus-ring rounded text-accent-foreground underline">
                 add it
               </button>
             </div>
@@ -231,7 +231,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 py-1.5 text-left"
+        className="focus-ring rounded flex w-full items-center gap-2 py-1.5 text-left"
         aria-expanded={open}
       >
         <ChevronRight
@@ -264,7 +264,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
               <div className="rounded-[14px] border border-dashed border-border bg-surface/50 p-5">
                 <p className="text-sm text-muted-foreground">
                   No shoe type set.{' '}
-                  <button type="button" onClick={onEditShoe} className="text-accent-foreground underline">
+                  <button type="button" onClick={onEditShoe} className="focus-ring rounded text-accent-foreground underline">
                     Edit this shoe
                   </button>{' '}
                   to add a type and see replacement deal suggestions.
@@ -319,7 +319,7 @@ function ReplacementDealCard({ deal }) {
           {formatCurrency(deal.current_price)}
         </div>
         {deal.product_url && (
-          <a href={deal.product_url} target="_blank" rel="noreferrer" className="mt-auto">
+          <a href={deal.product_url} target="_blank" rel="noreferrer" className="focus-ring mt-auto rounded-[8px]">
             <Button size="sm" variant="outline" className="w-full text-xs">
               View Deal <ExternalLink className="h-3 w-3" />
             </Button>
@@ -485,7 +485,7 @@ function NotesJournal({ ownedShoeId }) {
                   type="button"
                   onClick={() => setDeleting(note)}
                   aria-label="Delete note"
-                  className="text-muted-foreground hover:text-destructive"
+                  className="focus-ring rounded text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -608,7 +608,7 @@ function RunHistory({ ownedShoeId }) {
                       type="button"
                       onClick={() => setDeletingRun(run)}
                       aria-label="Remove run"
-                      className="text-muted-foreground hover:text-destructive"
+                      className="focus-ring rounded text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -626,7 +626,7 @@ function RunHistory({ ownedShoeId }) {
         <button
           type="button"
           onClick={() => setShowAll((s) => !s)}
-          className="text-sm font-medium text-accent-foreground hover:underline"
+          className="focus-ring rounded text-sm font-medium text-accent-foreground hover:underline"
         >
           {showAll ? 'Show less' : `Show all (${allRuns.length})`}
         </button>

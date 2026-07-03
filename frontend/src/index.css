@@ -43,6 +43,17 @@
   }
 }
 
+@layer components {
+  /*
+   * Shared keyboard focus treatment for custom <button>/<a>/<Link> elements
+   * that aren't the shared Button component (which already ships this ring).
+   * Tailwind preflight strips default outlines, so these need it explicitly.
+   */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

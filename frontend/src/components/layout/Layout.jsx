@@ -26,7 +26,7 @@ function NavLinks({ onNavigate }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
+              'focus-ring flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
               isActive
                 ? 'bg-accent font-bold text-accent-foreground'
                 : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground'

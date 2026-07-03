@@ -225,7 +225,7 @@ export default function MyShoes() {
             <button
               type="button"
               onClick={resetFilters}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="focus-ring rounded text-xs text-muted-foreground hover:text-foreground"
             >
               Reset filters
             </button>
@@ -254,7 +254,7 @@ export default function MyShoes() {
             <button
               type="button"
               onClick={() => setFormState({})}
-              className="flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-[#2E3239] text-faint hover:border-primary/40 hover:text-muted-foreground"
+              className="focus-ring flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-[#2E3239] text-faint hover:border-primary/40 hover:text-muted-foreground"
             >
               <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] border border-border bg-surface text-xl leading-none text-accent-foreground">
                 +
@@ -268,7 +268,7 @@ export default function MyShoes() {
               <button
                 type="button"
                 onClick={() => setRetiredCollapsed((c) => !c)}
-                className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
+                className="focus-ring rounded flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
               >
                 <ChevronDown
                   className={`h-3.5 w-3.5 transition-transform duration-200 ${retiredCollapsed ? '-rotate-90' : ''}`}
@@ -379,7 +379,7 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
 
   return (
     <div className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
-      <button type="button" onClick={onOpenDetail} className="flex flex-col gap-3.5 p-4 text-left">
+      <button type="button" onClick={onOpenDetail} className="focus-ring flex flex-col gap-3.5 p-4 text-left">
         <div className="flex gap-3.5">
           <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
             {image ? (
