@@ -40,6 +40,11 @@ def _print_report(report: bf.BackfillReport, policy: str) -> None:
     print(f"Will create (backfill runs):            {len(report.to_create)}")
     print(f"Skipped — gear unmapped:                {len(report.skipped_unmapped)}")
     print(f"Skipped — no gear:                      {len(report.skipped_no_gear)}")
+    print(f"Skipped — mapped but missing date/dist: {len(report.skipped_missing_data)}")
+
+    if report.skipped_missing_data:
+        print("\n-- Skipped: mapped gear but missing run_date/distance_km --")
+        print(f"  strava ids: {report.skipped_missing_data}")
 
     if report.conflicts:
         print("\n-- Shoe conflicts (COROS/manual assignment kept; gear differs) --")

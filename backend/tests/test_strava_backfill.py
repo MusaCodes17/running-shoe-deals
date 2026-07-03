@@ -137,6 +137,23 @@ def test_backfill_creates_for_unmatched_mapped_gear(db):
     assert rep.to_create[0].avg_pace == "5:00/km"
 
 
+def test_mapped_gear_missing_data_is_skipped_not_created(db):
+    # Mapped gear but no run_date/distance_km: ShoeRun's columns are non-nullable,
+    # so this must be shunted to skipped_missing_data, never to_create.
+    _shoe(db, 1)
+    _strava(db, 5001, None, None, gear="Adidas Evo SL")
+    _map(db, "Adidas Evo SL", 1)
+    db.commit()
+
+    rep = bf.plan_backfill(db)
+    assert rep.skipped_missing_data == [5001]
+    assert not rep.to_create
+    # execute must not blow up on the non-nullable columns.
+    rep2 = bf.execute_backfill(db)
+    assert rep2.skipped_missing_data == [5001]
+    assert db.query(ShoeRun).count() == 0
+
+
 def test_unmapped_and_no_gear_are_skipped(db):
     _shoe(db, 1)
     _strava(db, 5001, D, 10.0, gear="Unknown Shoe")  # gear present, unmapped

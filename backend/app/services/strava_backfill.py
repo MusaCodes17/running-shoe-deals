@@ -86,6 +86,7 @@ class BackfillReport:
     to_create: list[CreateIntent] = field(default_factory=list)
     skipped_unmapped: list[int] = field(default_factory=list)   # strava_activity_id, gear present but no shoe
     skipped_no_gear: list[int] = field(default_factory=list)    # strava_activity_id, no gear at all
+    skipped_missing_data: list[int] = field(default_factory=list)  # strava_activity_id, mapped gear but no date/distance
     reconcile: list[ShoeReconcile] = field(default_factory=list)
     committed: bool = False
 
@@ -166,9 +167,6 @@ def plan_backfill(
     for s in strava_runs:
         if s.strava_activity_id in already_linked:
             continue
-        if s.run_date is None or s.distance_km is None:
-            # No date/distance to match on — treat as backfill candidate below.
-            pass
 
         gear_shoe_id = gear_map.get(s.gear_name) if s.gear_name else None
 
@@ -217,6 +215,11 @@ def plan_backfill(
 
         # --- backfill candidate (no existing counterpart) ---
         if gear_shoe_id is not None:
+            if s.run_date is None or s.distance_km is None:
+                # Gear maps to a shoe, but ShoeRun.run_date/distance_km are
+                # non-nullable — creating this row would blow up the commit.
+                report.skipped_missing_data.append(s.strava_activity_id)
+                continue
             report.to_create.append(CreateIntent(
                 strava_activity_id=s.strava_activity_id,
                 owned_shoe_id=gear_shoe_id,
