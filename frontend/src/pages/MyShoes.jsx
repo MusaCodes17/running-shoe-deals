@@ -410,7 +410,7 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
             </div>
           </div>
         </div>
-        <MileageProgressBar mileage={shoe.current_mileage} compact />
+        <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} compact />
       </button>
       <div className="grid grid-cols-2 border-t border-border text-[12px] font-bold">
         <button

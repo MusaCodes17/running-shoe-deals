@@ -148,7 +148,7 @@ export default function ShoeDetail() {
       <div className="grid grid-cols-1 gap-4 rounded-[14px] border border-border bg-surface p-4 sm:grid-cols-3">
         <div className="space-y-1.5">
           <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
-          <MileageProgressBar mileage={shoe.current_mileage} />
+          <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} />
         </div>
         <Stat label="Total runs" value={shoe.total_runs ?? 0} />
         <div className="flex flex-col gap-1">
