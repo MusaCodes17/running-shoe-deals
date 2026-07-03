@@ -147,7 +147,7 @@ function HighestDealTile({ deal }) {
 
   return (
     <Link
-      to="/deals"
+      to={`/deals?deal=${deal.id}`}
       className="focus-ring flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface"
     >
       <div className="relative flex h-[140px] items-center justify-center bg-[repeating-linear-gradient(135deg,#202327,#202327_7px,#26292E_7px,#26292E_14px)]">
@@ -202,7 +202,7 @@ function RecentDealRow({ deal }) {
 
   return (
     <Link
-      to="/deals"
+      to={`/deals?deal=${deal.id}`}
       className="focus-ring flex items-center gap-[13px] border-b border-[#1A1D22] px-[18px] py-[13px] last:border-b-0"
     >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[repeating-linear-gradient(135deg,#202327,#202327_5px,#26292E_5px,#26292E_10px)]">
