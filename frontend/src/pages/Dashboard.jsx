@@ -3,6 +3,7 @@ import { Tag, Footprints, ArrowRight } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import StatCard from '@/components/StatCard'
 import ScrapeButton from '@/components/ScrapeButton'
+import TrainingVolumeCard from '@/components/TrainingVolumeCard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ErrorState, EmptyState, CardSkeletonGrid, RowSkeleton } from '@/components/StatusViews'
@@ -58,6 +59,9 @@ export default function Dashboard() {
           />
         </div>
       )}
+
+      {/* Training volume (imported Strava history) */}
+      <TrainingVolumeCard />
 
       {/* Highest deals */}
       <section>
