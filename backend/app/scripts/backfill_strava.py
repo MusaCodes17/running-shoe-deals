@@ -47,9 +47,10 @@ def _print_report(report: bf.BackfillReport, policy: str) -> None:
             print(f"  • {c.detail}")
 
     if report.date_shift:
-        print("\n-- Date-shift candidates (NOT auto-linked; confirm by hand) --")
+        print("\n-- Date-shift candidates (±1 day; NOT auto-linked; confirm by hand) --")
         for d in report.date_shift:
-            print(f"  • {d.detail}")
+            print(f"  • strava {d['strava_activity_id']} ({d['run_date']}, {d['distance_km']}km) "
+                  f"→ runs {d['candidate_run_ids']}")
 
     if report.ambiguous:
         print("\n-- Ambiguous same-day matches (NOT auto-linked) --")

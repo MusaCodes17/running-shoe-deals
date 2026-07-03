@@ -81,7 +81,7 @@ class ShoeReconcile:
 @dataclass
 class BackfillReport:
     matched: list[LinkIntent] = field(default_factory=list)
-    date_shift: list[LinkIntent] = field(default_factory=list)
+    date_shift: list[dict] = field(default_factory=list)  # mirrors `ambiguous` shape
     ambiguous: list[dict] = field(default_factory=list)
     to_create: list[CreateIntent] = field(default_factory=list)
     skipped_unmapped: list[int] = field(default_factory=list)   # strava_activity_id, gear present but no shoe
@@ -205,7 +205,14 @@ def plan_backfill(
                 shift.extend(_candidates(d, s.distance_km))
 
         if shift:
-            report.date_shift.append(_make_link(s, shift[0], gear_shoe_id, "date-shift"))
+            # Carry EVERY ±1-day candidate (not just the first) so manual
+            # review sees the full picture — same shape as `ambiguous`.
+            report.date_shift.append({
+                "strava_activity_id": s.strava_activity_id,
+                "run_date": str(s.run_date),
+                "distance_km": s.distance_km,
+                "candidate_run_ids": [r.id for r in shift],
+            })
             continue
 
         # --- backfill candidate (no existing counterpart) ---

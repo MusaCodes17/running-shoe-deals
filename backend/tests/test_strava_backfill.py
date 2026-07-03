@@ -94,7 +94,8 @@ def test_multi_candidate_closest_distance_wins(db):
 
 def test_date_shift_widening_flags_not_links(db):
     _shoe(db, 1)
-    _run(db, 1, D + timedelta(days=1), 10.0)  # one day off
+    r_before = _run(db, 1, D - timedelta(days=1), 10.0)  # one day before
+    r_after = _run(db, 1, D + timedelta(days=1), 10.0)   # one day after
     _strava(db, 5001, D, 10.0, gear="Adidas Evo SL")
     _map(db, "Adidas Evo SL", 1)
     db.commit()
@@ -102,6 +103,10 @@ def test_date_shift_widening_flags_not_links(db):
     rep = bf.plan_backfill(db)
     assert not rep.matched
     assert len(rep.date_shift) == 1
+    # ALL ±1-day candidates are carried, not just the first.
+    entry = rep.date_shift[0]
+    assert entry["strava_activity_id"] == 5001
+    assert set(entry["candidate_run_ids"]) == {r_before.id, r_after.id}
     assert not rep.to_create  # date-shift is manual-only, never auto-created
 
 
