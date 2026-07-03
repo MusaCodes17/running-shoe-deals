@@ -66,7 +66,7 @@ export default function Dashboard() {
       {/* Highest deals */}
       <section>
         <div className="mb-3.5 flex items-center justify-between">
-          <h2 className="font-heading text-[17px] font-bold text-foreground">Highest deals</h2>
+          <h2 className="font-heading text-lg-plus font-bold text-foreground">Highest deals</h2>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/deals">
               View all <ArrowRight className="h-4 w-4" />
@@ -98,11 +98,11 @@ export default function Dashboard() {
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
           <div className="flex items-center gap-2.5">
             <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_3px_oklch(0.74_0.17_153_/_0.18)]" />
-            <span className="font-heading text-[15px] font-bold text-foreground">
+            <span className="font-heading text-md-plus font-bold text-foreground">
               Recently detected
             </span>
           </div>
-          <span className="font-mono text-[11px] text-faint">live</span>
+          <span className="font-mono text-2xs text-faint">live</span>
         </div>
 
         {recent.isLoading ? (
@@ -157,20 +157,20 @@ function HighestDealTile({ deal }) {
           <Footprints className="h-8 w-8 text-faint" />
         )}
         {deal.savings_percent != null && (
-          <Badge className="absolute left-[11px] top-[11px] rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-[13px] font-extrabold text-primary-foreground">
+          <Badge className="absolute left-[11px] top-[11px] rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-sm-plus font-extrabold text-primary-foreground">
             {formatPercent(deal.savings_percent)} OFF
           </Badge>
         )}
       </div>
       <div className="flex flex-1 flex-col gap-0.5 p-4">
-        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent-foreground">
+        <span className="text-2xs font-bold uppercase tracking-[0.1em] text-accent-foreground">
           {shoe.brand}
         </span>
         <span className="font-heading text-base font-bold text-foreground">{shoe.model}</span>
-        <span className="text-[13px] text-muted-foreground">{retailerName}</span>
+        <span className="text-sm-plus text-muted-foreground">{retailerName}</span>
         <div className="mt-auto pt-3">
           <div className="flex items-baseline gap-2">
-            <span className="font-heading text-[23px] font-extrabold text-foreground">
+            <span className="font-heading text-stat font-extrabold text-foreground">
               {formatCurrency(deal.current_price)}
             </span>
             {shoe.msrp != null && (
@@ -182,7 +182,7 @@ function HighestDealTile({ deal }) {
               </span>
             )}
           </div>
-          <p className="text-[13px] text-faint">
+          <p className="text-sm-plus text-faint">
             {[
               shoe.msrp != null && `Retail price ${formatCurrency(shoe.msrp)}`,
               deal.target_price != null && `Target ${formatCurrency(deal.target_price)}`,
@@ -212,7 +212,7 @@ function RecentDealRow({ deal }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-accent-foreground">
+          <span className="text-2xs font-bold uppercase tracking-[0.06em] text-accent-foreground">
             {shoe.brand}
           </span>
           <span className="font-mono text-[10px] text-faint">
@@ -224,7 +224,7 @@ function RecentDealRow({ deal }) {
       </div>
       <div className="shrink-0 text-right">
         <div className="flex items-baseline justify-end gap-1.5">
-          <span className="font-heading text-[15px] font-extrabold text-foreground">
+          <span className="font-heading text-md-plus font-extrabold text-foreground">
             {formatCurrency(deal.current_price)}
           </span>
           {shoe.msrp != null && (
@@ -237,7 +237,7 @@ function RecentDealRow({ deal }) {
           )}
         </div>
         {deal.savings_percent != null && (
-          <div className="text-[11px] font-bold text-accent-foreground">
+          <div className="text-2xs font-bold text-accent-foreground">
             −{formatPercent(deal.savings_percent)}
           </div>
         )}

@@ -102,7 +102,7 @@ export default function ShoeDetail() {
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+              <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
                 {shoe.brand}
               </div>
               <h1 className="font-heading text-2xl font-extrabold leading-tight text-foreground">
@@ -147,7 +147,7 @@ export default function ShoeDetail() {
       {/* Stats row */}
       <div className="grid grid-cols-1 gap-4 rounded-[14px] border border-border bg-surface p-4 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
+          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
           <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} />
         </div>
         <Stat label="Total runs" value={shoe.total_runs ?? 0} />
@@ -300,7 +300,7 @@ function ReplacementDealCard({ deal }) {
           <Footprints className="h-8 w-8 text-faint" />
         )}
         {deal.savings_percent != null && (
-          <Badge className="absolute right-1.5 top-1.5 bg-primary px-2 py-0.5 font-heading text-[11px] font-extrabold text-primary-foreground">
+          <Badge className="absolute right-1.5 top-1.5 bg-primary px-2 py-0.5 font-heading text-2xs font-extrabold text-primary-foreground">
             {Math.round(deal.savings_percent)}% OFF
           </Badge>
         )}
@@ -313,7 +313,7 @@ function ReplacementDealCard({ deal }) {
           <div className="line-clamp-2 font-heading text-sm font-bold leading-tight text-foreground">
             {deal.model}
           </div>
-          <div className="text-[11px] text-muted-foreground">{deal.retailer}</div>
+          <div className="text-2xs text-muted-foreground">{deal.retailer}</div>
         </div>
         <div className="font-heading text-base font-extrabold text-foreground">
           {formatCurrency(deal.current_price)}
@@ -333,7 +333,7 @@ function ReplacementDealCard({ deal }) {
 function Stat({ label, value }) {
   return (
     <div className="space-y-1">
-      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
       <div className="font-heading text-lg font-bold text-foreground">{value}</div>
     </div>
   )
@@ -471,7 +471,7 @@ function NotesJournal({ ownedShoeId }) {
           {notes.data.map((note) => (
             <div key={note.id} className="relative rounded-[10px] border border-border bg-surface p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-[11px] text-faint">
+                <div className="flex items-center gap-2 text-2xs text-faint">
                   <span>{formatDate(note.created_at)}</span>
                   <span>·</span>
                   <span>{Math.round(note.mileage_at_note)} km</span>

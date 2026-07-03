@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 export default function StatCard({ label, value, hint, loading }) {
   return (
     <div className="rounded-[13px] border border-border bg-surface p-[17px]">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+      <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
       </div>
       {loading ? (

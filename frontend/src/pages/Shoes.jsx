@@ -203,7 +203,7 @@ export default function Shoes() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+                    <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
                       {shoe.brand}
                     </div>
                     <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
@@ -225,7 +225,7 @@ export default function Shoes() {
                       />
                       <span
                         className={cn(
-                          'text-[11px] font-bold',
+                          'text-2xs font-bold',
                           onSale ? 'text-accent-foreground' : 'text-muted-foreground'
                         )}
                       >
@@ -236,7 +236,7 @@ export default function Shoes() {
                 </div>
                 <div className="flex border-t border-border">
                   <div className="flex-1 border-r border-border px-4 py-3">
-                    <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+                    <div className="text-2xs uppercase tracking-[0.06em] text-faint">
                       {onSale ? 'Lowest active' : 'Current price'}
                     </div>
                     <div className="flex items-baseline gap-1.5">
@@ -254,7 +254,7 @@ export default function Shoes() {
                     </div>
                   </div>
                   <div className="flex-1 px-4 py-3">
-                    <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+                    <div className="text-2xs uppercase tracking-[0.06em] text-faint">
                       Retailers
                     </div>
                     <div className="mt-0.5 font-heading text-lg font-extrabold text-foreground">
@@ -262,7 +262,7 @@ export default function Shoes() {
                     </div>
                   </div>
                 </div>
-                <div className="flex border-t border-border text-[13px] font-bold">
+                <div className="flex border-t border-border text-sm-plus font-bold">
                   <button
                     type="button"
                     onClick={() => setHistoryShoe(shoe)}

@@ -46,7 +46,7 @@ function ResourcePicker({ groups, filter, activeIndex, onSelect, onClose, contai
               >
                 <span className="text-sm font-medium leading-snug">{item.label}</span>
                 {item.sublabel && (
-                  <span className="text-[11px] opacity-60 leading-snug">{item.sublabel}</span>
+                  <span className="text-2xs opacity-60 leading-snug">{item.sublabel}</span>
                 )}
               </button>
             )

@@ -56,9 +56,9 @@ export default function TrainingVolumeCard() {
       <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
         <div className="flex items-center gap-2.5">
           <Activity className="h-4 w-4 text-primary" />
-          <span className="font-heading text-[15px] font-bold text-foreground">Training volume</span>
+          <span className="font-heading text-md-plus font-bold text-foreground">Training volume</span>
         </div>
-        <span className="font-mono text-[11px] text-faint">monthly · last 12 mo</span>
+        <span className="font-mono text-2xs text-faint">monthly · last 12 mo</span>
       </div>
       <div className="p-4">
         {isLoading ? (

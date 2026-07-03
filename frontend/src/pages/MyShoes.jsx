@@ -275,7 +275,7 @@ export default function MyShoes() {
               <button
                 type="button"
                 onClick={() => setRetiredCollapsed((c) => !c)}
-                className="focus-ring rounded flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
+                className="focus-ring rounded flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
               >
                 <ChevronDown
                   className={`h-3.5 w-3.5 transition-transform duration-200 ${retiredCollapsed ? '-rotate-90' : ''}`}
@@ -402,7 +402,7 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+                <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
                   {shoe.brand}
                 </div>
                 <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
