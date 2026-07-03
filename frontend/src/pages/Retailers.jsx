@@ -158,7 +158,7 @@ export default function Retailers() {
             return (
               <div
                 key={retailer.id}
-                className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] items-center gap-3.5 border-b border-[#1A1D22] px-5 py-3.5 last:border-b-0"
+                className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] items-center gap-3.5 border-b border-divider px-5 py-3.5 last:border-b-0"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-[15px] font-extrabold text-secondary-foreground">

@@ -92,7 +92,7 @@ export default function ShoeDetail() {
 
       {/* Header */}
       <div className="flex flex-col gap-5 sm:flex-row">
-        <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+        <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-placeholder-stripes">
           {image ? (
             <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
           ) : (
@@ -293,7 +293,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
 function ReplacementDealCard({ deal }) {
   return (
     <div className="flex w-[190px] shrink-0 flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
-      <div className="relative flex h-[110px] items-center justify-center overflow-hidden bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+      <div className="relative flex h-[110px] items-center justify-center overflow-hidden bg-placeholder-stripes">
         {deal.image_url ? (
           <img src={deal.image_url} alt={deal.model} className="h-full w-full object-contain" />
         ) : (

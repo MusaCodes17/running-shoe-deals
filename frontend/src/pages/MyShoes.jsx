@@ -261,7 +261,7 @@ export default function MyShoes() {
             <button
               type="button"
               onClick={() => setFormState({})}
-              className="focus-ring flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-[#2E3239] text-faint hover:border-primary/40 hover:text-muted-foreground"
+              className="focus-ring flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-edge text-faint hover:border-primary/40 hover:text-muted-foreground"
             >
               <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] border border-border bg-surface text-xl leading-none text-accent-foreground">
                 +
@@ -392,7 +392,7 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
     <div className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
       <button type="button" onClick={onOpenDetail} className="focus-ring flex flex-col gap-3.5 p-4 text-left">
         <div className="flex gap-3.5">
-          <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+          <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-placeholder-stripes">
             {image ? (
               <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
             ) : (

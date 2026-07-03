@@ -195,7 +195,7 @@ export default function Shoes() {
                 className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface"
               >
                 <div className="flex gap-3.5 p-4">
-                  <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+                  <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-placeholder-stripes">
                     {image ? (
                       <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
                     ) : (
@@ -299,7 +299,7 @@ export default function Shoes() {
           <button
             type="button"
             onClick={() => setFormState({})}
-            className="flex min-h-[200px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-[#2E3239] text-faint hover:border-primary/40 hover:text-muted-foreground"
+            className="flex min-h-[200px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-edge text-faint hover:border-primary/40 hover:text-muted-foreground"
           >
             <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] border border-border bg-surface text-xl leading-none text-accent-foreground">
               +

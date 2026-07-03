@@ -65,6 +65,10 @@ export default {
         // distinct from the panel background itself.
         surface: 'var(--surface)',
         faint: 'var(--faint)',
+        sidebar: 'var(--sidebar)',
+        divider: 'var(--divider)',
+        edge: 'var(--edge)',
+        'nav-inactive': 'var(--nav-inactive)',
       },
       borderRadius: {
         lg: 'var(--radius)',
