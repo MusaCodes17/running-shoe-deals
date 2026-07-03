@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown, MoreHorizontal } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
@@ -26,6 +26,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
 import { useToast } from '@/components/ui/toast'
 import {
@@ -357,7 +364,11 @@ export default function MyShoes() {
             <DialogTitle>Delete shoe?</DialogTitle>
             <DialogDescription>
               {deleting &&
-                `This removes "${deleting.brand} ${deleting.model}" and its run history. This cannot be undone.`}
+                `This removes "${deleting.brand} ${deleting.model}"${
+                  deleting.total_runs
+                    ? ` and its ${deleting.total_runs} logged run${deleting.total_runs === 1 ? '' : 's'}`
+                    : ' and its run history'
+                }. This cannot be undone.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -412,35 +423,41 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
         </div>
         <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} compact />
       </button>
-      <div className="grid grid-cols-2 border-t border-border text-[12px] font-bold">
+      <div className="grid grid-cols-[1fr_1fr_auto] border-t border-border text-[12px] font-bold">
         <button
           type="button"
           onClick={onOpenDetail}
-          className="flex items-center justify-center gap-1.5 border-b border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
+          className="focus-ring flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <ArrowUpRight className="h-3.5 w-3.5" /> Details
         </button>
         <button
           type="button"
           onClick={onLogRun}
-          className="flex items-center justify-center gap-1.5 border-b border-border py-2 text-secondary-foreground hover:bg-secondary"
+          className="focus-ring flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <PlayCircle className="h-3.5 w-3.5" /> Log run
         </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
-        >
-          <Pencil className="h-3.5 w-3.5" /> Edit
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="flex items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-secondary hover:text-destructive"
-        >
-          <Trash2 className="h-3.5 w-3.5" /> Remove
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="More actions"
+            className="focus-ring flex items-center justify-center px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={onDelete}
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
