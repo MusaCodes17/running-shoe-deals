@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown, MoreHorizontal } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown, MoreHorizontal, AlertTriangle, Tag } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
@@ -37,6 +37,7 @@ import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusVie
 import { useToast } from '@/components/ui/toast'
 import {
   useOwnedShoes,
+  useRotationOverview,
   useCreateOwnedShoe,
   useUpdateOwnedShoe,
   useDeleteOwnedShoe,
@@ -59,6 +60,11 @@ const SORTS = {
   mileage_asc: { label: 'Least mileage', fn: (a, b) => a.current_mileage - b.current_mileage },
   newest: { label: 'Newest added', fn: (a, b) => new Date(b.created_at) - new Date(a.created_at) },
 }
+
+// Order the by-type groups the same way the type filter lists them; untyped
+// shoes fall into a trailing "Uncategorized" group.
+const TYPE_ORDER = SHOE_TYPES.map((t) => t.value)
+const UNTYPED = '__untyped__'
 
 const statusVariant = {
   active: 'success',
@@ -85,6 +91,7 @@ export default function MyShoes() {
   const [retiredCollapsed, setRetiredCollapsed] = useState(true)
 
   const shoes = useOwnedShoes()
+  const overview = useRotationOverview()
   const create = useCreateOwnedShoe()
   const update = useUpdateOwnedShoe()
   const remove = useDeleteOwnedShoe()
@@ -118,6 +125,37 @@ export default function MyShoes() {
 
   const activeShoes = filtered.filter((s) => s.status !== 'retired')
   const retiredShoes = filtered.filter((s) => s.status === 'retired')
+
+  // Active rotation grouped by shoe type, groups ordered like the type filter,
+  // "Uncategorized" last. Within a group, the active `sort` ordering is
+  // preserved (filtered is already sorted).
+  const activeGroups = useMemo(() => {
+    const byType = new Map()
+    for (const shoe of activeShoes) {
+      const key = shoe.shoe_type || UNTYPED
+      if (!byType.has(key)) byType.set(key, [])
+      byType.get(key).push(shoe)
+    }
+    const order = [...TYPE_ORDER, UNTYPED]
+    return [...byType.entries()]
+      .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+      .map(([type, list]) => ({
+        type,
+        label: type === UNTYPED ? 'Uncategorized' : SHOE_TYPE_LABELS[type] || type,
+        shoes: list,
+        totalKm: list.reduce((sum, s) => sum + (s.current_mileage || 0), 0),
+      }))
+  }, [activeShoes])
+
+  // Server-computed retirement pipeline (shoes ≥75% of limit + replacement-deal
+  // counts), intersected with the current filters and joined to full shoe rows.
+  const pipeline = useMemo(() => {
+    const entries = overview.data?.pipeline || []
+    const activeById = new Map(activeShoes.map((s) => [s.id, s]))
+    return entries
+      .map((e) => ({ ...e, shoe: activeById.get(e.owned_shoe_id) }))
+      .filter((e) => e.shoe) // drop entries filtered out client-side
+  }, [overview.data, activeShoes])
 
   const handleSubmit = (payload) => {
     const editing = formState?.shoe
@@ -246,29 +284,39 @@ export default function MyShoes() {
         <ErrorState error={shoes.error} onRetry={shoes.refetch} />
       ) : filtered.length ? (
         <div className="space-y-8">
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-            {activeShoes.map((shoe) => (
-              <ShoeCard
-                key={shoe.id}
-                shoe={shoe}
-                onOpenDetail={() => navigate(`/shoes/${shoe.id}`)}
-                onLogRun={() => setLogRunShoe(shoe)}
-                onEdit={() => setFormState({ shoe })}
-                onDelete={() => setDeleting(shoe)}
-              />
-            ))}
+          {pipeline.length > 0 && <RetirementPipeline entries={pipeline} onOpenDetail={(id) => navigate(`/shoes/${id}`)} />}
 
-            <button
-              type="button"
-              onClick={() => setFormState({})}
-              className="focus-ring flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-edge text-faint hover:border-primary/40 hover:text-muted-foreground"
-            >
-              <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] border border-border bg-surface text-xl leading-none text-accent-foreground">
-                +
-              </span>
-              <span className="text-sm font-bold text-secondary-foreground">Add a shoe</span>
-            </button>
-          </div>
+          {activeGroups.map((group) => (
+            <section key={group.type}>
+              <div className="mb-3.5 flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+                <span>{group.label}</span>
+                <span className="text-edge">·</span>
+                <span>{group.shoes.length}</span>
+                <span className="text-edge">·</span>
+                <span className="tabular-nums">{Math.round(group.totalKm)} km</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                {group.shoes.map((shoe) => (
+                  <ShoeCard
+                    key={shoe.id}
+                    shoe={shoe}
+                    onOpenDetail={() => navigate(`/shoes/${shoe.id}`)}
+                    onLogRun={() => setLogRunShoe(shoe)}
+                    onEdit={() => setFormState({ shoe })}
+                    onDelete={() => setDeleting(shoe)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setFormState({})}
+            className="focus-ring flex w-full items-center justify-center gap-2 rounded-[14px] border-[1.5px] border-dashed border-edge py-4 text-sm font-bold text-secondary-foreground hover:border-primary/40 hover:text-foreground"
+          >
+            <Plus className="h-4 w-4" /> Add a shoe
+          </button>
 
           {retiredShoes.length > 0 && (
             <div className="border-t border-border pt-6">
@@ -381,6 +429,73 @@ export default function MyShoes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function RetirementPipeline({ entries, onOpenDetail }) {
+  return (
+    <section className="rounded-[14px] border border-warning/30 bg-warning/5 p-4">
+      <div className="mb-1.5 flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-warning" />
+        <h2 className="font-heading text-sm font-bold text-foreground">Retirement pipeline</h2>
+        <Badge variant="warning">{entries.length}</Badge>
+      </div>
+      <p className="mb-3.5 text-xs text-muted-foreground">
+        Past 75% of their mileage limit — worst first. Time to plan a replacement.
+      </p>
+      <div className="space-y-2.5">
+        {entries.map((entry) => (
+          <PipelineRow key={entry.owned_shoe_id} entry={entry} onOpenDetail={onOpenDetail} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PipelineRow({ entry, onOpenDetail }) {
+  const { shoe, pct, current_mileage, mileage_limit, replacement_deals } = entry
+  const image = shoe.image_url || shoe.matched_image_url
+  const overLimit = pct >= 1
+
+  return (
+    <div className="flex flex-col gap-3 rounded-[11px] border border-border bg-surface p-3 sm:flex-row sm:items-center">
+      <button
+        type="button"
+        onClick={() => onOpenDetail(shoe.id)}
+        className="focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
+      >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-placeholder-stripes">
+          {image ? (
+            <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
+          ) : (
+            <Footprints className="h-5 w-5 text-faint" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-heading text-sm font-bold text-foreground">
+              {shoe.nickname || `${shoe.brand} ${shoe.model}`}
+            </span>
+            <Badge variant={overLimit ? 'destructive' : 'warning'}>{Math.round(pct * 100)}%</Badge>
+          </div>
+          <div className="mt-1.5 max-w-[240px]">
+            <MileageProgressBar mileage={current_mileage} limit={mileage_limit} />
+          </div>
+        </div>
+      </button>
+      <div className="shrink-0 sm:pl-2">
+        {replacement_deals > 0 ? (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/deals">
+              <Tag className="h-3.5 w-3.5" />
+              {replacement_deals} replacement deal{replacement_deals === 1 ? '' : 's'}
+            </Link>
+          </Button>
+        ) : (
+          <span className="text-2xs text-faint">No replacement deals yet</span>
+        )}
+      </div>
     </div>
   )
 }
