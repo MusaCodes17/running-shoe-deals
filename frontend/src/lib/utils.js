@@ -24,7 +24,13 @@ export function formatPercent(value) {
 /** Format an ISO datetime into a short, human-friendly local string. */
 export function formatDate(value, opts = {}) {
   if (!value) return '—'
-  const date = new Date(value)
+  // A bare calendar date ("2026-07-02") is parsed by Date as UTC midnight,
+  // which then renders as the previous day in western timezones. Treat those
+  // as local dates so a run's date shows the day it actually happened.
+  const date =
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? new Date(`${value}T00:00:00`)
+      : new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleDateString('en-CA', {
     year: 'numeric',
@@ -32,6 +38,31 @@ export function formatDate(value, opts = {}) {
     day: 'numeric',
     ...opts,
   })
+}
+
+/**
+ * Format a duration in seconds as "M:SS" (under an hour) or "H:MM:SS".
+ * Used for race times and whole-activity record times.
+ */
+export function formatDuration(seconds) {
+  if (seconds == null || Number.isNaN(seconds)) return '—'
+  const total = Math.round(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+/** Parse "H:MM:SS" or "M:SS" into total seconds. Returns null if unparseable. */
+export function parseDuration(text) {
+  if (!text) return null
+  const parts = text.trim().split(':').map((p) => parseInt(p, 10))
+  if (parts.some(Number.isNaN)) return null
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 1) return parts[0]
+  return null
 }
 
 /**

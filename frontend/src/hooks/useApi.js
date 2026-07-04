@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   shoesApi,
   retailersApi,
@@ -11,6 +11,9 @@ import {
   trainingApi,
   stravaApi,
   watchlistApi,
+  activitiesApi,
+  racesApi,
+  homeApi,
   SCRAPE_STREAM_URL,
 } from '@/services/api'
 
@@ -23,8 +26,6 @@ export const queryKeys = {
   retailers: (params) => ['retailers', params ?? {}],
   deals: (params) => ['deals', params ?? {}],
   dashboardStats: () => ['dashboard', 'stats'],
-  recentDeals: (limit) => ['dashboard', 'recent-deals', limit],
-  bestDeals: (limit) => ['dashboard', 'best-deals', limit],
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
@@ -32,8 +33,12 @@ export const queryKeys = {
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   corosSyncStatus: () => ['coros', 'sync-status'],
   trainingSummary: (period) => ['training', 'summary', period],
+  trainingRecords: () => ['training', 'records'],
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
+  activities: (params) => ['activities', params ?? {}],
+  races: () => ['races'],
+  home: () => ['home'],
 }
 
 // ============== SHOES ==============
@@ -192,17 +197,11 @@ export function useDashboardStats() {
   })
 }
 
-export function useRecentDeals(limit = 8) {
+// ============== HOME ==============
+export function useHome() {
   return useQuery({
-    queryKey: queryKeys.recentDeals(limit),
-    queryFn: () => dashboardApi.recentDeals(limit),
-  })
-}
-
-export function useBestDeals(limit = 8) {
-  return useQuery({
-    queryKey: queryKeys.bestDeals(limit),
-    queryFn: () => dashboardApi.bestDeals(limit),
+    queryKey: queryKeys.home(),
+    queryFn: () => homeApi.summary(),
   })
 }
 
@@ -211,6 +210,54 @@ export function useTrainingSummary(period = 'monthly') {
   return useQuery({
     queryKey: queryKeys.trainingSummary(period),
     queryFn: () => trainingApi.summary(period),
+  })
+}
+
+export function useTrainingRecords() {
+  return useQuery({
+    queryKey: queryKeys.trainingRecords(),
+    queryFn: () => trainingApi.records(),
+  })
+}
+
+// ============== ACTIVITIES ==============
+export function useActivities(params) {
+  return useQuery({
+    queryKey: queryKeys.activities(params),
+    queryFn: () => activitiesApi.list(params),
+    placeholderData: keepPreviousData,
+  })
+}
+
+// ============== PLANNED RACES ==============
+export function useRaces() {
+  return useQuery({
+    queryKey: queryKeys.races(),
+    queryFn: () => racesApi.list(),
+  })
+}
+
+export function useCreateRace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => racesApi.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+  })
+}
+
+export function useUpdateRace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }) => racesApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+  })
+}
+
+export function useDeleteRace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => racesApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
   })
 }
 

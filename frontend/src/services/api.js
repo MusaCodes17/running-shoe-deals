@@ -149,6 +149,25 @@ export const ownedShoesApi = {
 export const trainingApi = {
   summary: (period = 'monthly') =>
     client.get('/api/training/summary', { params: { period } }).then((r) => r.data),
+  records: () => client.get('/api/training/records').then((r) => r.data),
+}
+
+// ============== ACTIVITIES (unified run feed) ==============
+export const activitiesApi = {
+  list: (params) => client.get('/api/activities', { params }).then((r) => r.data),
+}
+
+// ============== PLANNED RACES ==============
+export const racesApi = {
+  list: () => client.get('/api/races').then((r) => r.data),
+  create: (data) => client.post('/api/races', data).then((r) => r.data),
+  update: (id, data) => client.patch(`/api/races/${id}`, data).then((r) => r.data),
+  remove: (id) => client.delete(`/api/races/${id}`).then((r) => r.data),
+}
+
+// ============== HOME ==============
+export const homeApi = {
+  summary: () => client.get('/api/home').then((r) => r.data),
 }
 
 // ============== STRAVA ==============
