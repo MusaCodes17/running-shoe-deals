@@ -864,9 +864,10 @@ def retire_shoe(owned_shoe_id: int) -> dict:
 @mcp.tool()
 def get_training_summary(period: str = "monthly") -> dict:
     """
-    Weekly or monthly training aggregates over the full imported Strava run
-    history: total distance, run count, average pace, average heart rate, and
-    elevation gain per period (newest first).
+    Weekly or monthly training aggregates over the full run history (imported
+    Strava runs unioned with live COROS/manual runs): total distance, run
+    count, average pace, average heart rate, and elevation gain per period
+    (newest first).
 
     Use this for questions like "how much did I run last month", "what were my
     weekly volumes this year", or "how has my average pace trended".
@@ -898,7 +899,8 @@ def get_training_summary(period: str = "monthly") -> dict:
 def get_personal_bests() -> dict:
     """
     Fastest average pace at each distance band (5k, 10k, half, full) across
-    all imported Strava runs.
+    the full run history (imported Strava runs unioned with live COROS/manual
+    runs).
 
     IMPORTANT: these are *average-pace-for-the-whole-activity* bests within a
     distance tolerance — not true segment/split PBs. Describe them that way to
@@ -917,6 +919,8 @@ def get_personal_bests() -> dict:
                     "distance_km": b.distance_km,
                     "avg_pace": b.avg_pace,
                     "avg_hr": b.avg_hr,
+                    "source": b.source,
+                    "shoe": b.shoe,
                     "strava_activity_id": b.strava_activity_id,
                 }
                 for b in bests

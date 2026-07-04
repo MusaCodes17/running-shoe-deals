@@ -29,10 +29,43 @@ class PeriodSummaryResponse(BaseModel):
         from_attributes = True
 
 
+class RecordShoe(BaseModel):
+    id: int
+    brand: str
+    model: str
+    nickname: Optional[str] = None
+
+
+class PersonalBestResponse(BaseModel):
+    """One distance-band record from strava_stats.personal_bests. Whole-activity
+    average-pace best, not a segment PB."""
+    band: str              # "5k" | "10k" | "half" | "full"
+    target_km: float
+    run_date: Optional[str] = None
+    name: Optional[str] = None
+    distance_km: float
+    avg_pace: str
+    avg_hr: Optional[int] = None
+    source: str
+    shoe: Optional[RecordShoe] = None
+    strava_activity_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
 @router.get("/summary", response_model=List[PeriodSummaryResponse])
 def get_training_summary(
     period: str = Query("monthly", pattern="^(monthly|weekly)$"),
     db: Session = Depends(get_db),
 ):
-    """Aggregated run volume by month or week, newest period first."""
+    """Aggregated run volume by month or week (union of Strava + shoe_runs),
+    newest period first."""
     return strava_stats.training_summary(db, period=period)
+
+
+@router.get("/records", response_model=List[PersonalBestResponse])
+def get_training_records(db: Session = Depends(get_db)):
+    """Fastest average pace at each distance band, over the unioned run history.
+    These are whole-activity average-pace bests, not segment PBs."""
+    return strava_stats.personal_bests(db)

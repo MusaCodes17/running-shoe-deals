@@ -1,19 +1,24 @@
 """
-Read-only analytics over imported Strava run history (§6).
+Read-only analytics over run history (§6, §3).
 
 Pure query helpers behind the MCP tools get_training_summary /
-get_personal_bests. Runs only (activity_type == 'Run'). Pace is stored as
-seconds-per-km; formatting to "M:SS/km" happens here at the boundary.
+get_personal_bests. As of Phase 3 these compute over the UNION of imported
+Strava runs and live `shoe_runs` (via app.services.activities), not
+`strava_activities` alone — so post-export COROS/manual runs are included and
+the web UI, MCP, and mobile client all agree. Pace formatting to "M:SS/km"
+happens here at the boundary.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import StravaActivity
+from app.services import activities as activities_svc
 from app.services import rotation
+from app.services.activities import UnifiedActivity, _effective_moving_s
 
 # Distance bands for personal bests: (label, target_km, tolerance_km).
 # These are average-pace-for-the-whole-activity bests, NOT true segment PBs.
@@ -39,18 +44,17 @@ class PeriodSummary:
 class PersonalBest:
     band: str
     target_km: float
-    strava_activity_id: int
     run_date: Optional[str]
     name: Optional[str]
     distance_km: float
     avg_pace: str
     avg_hr: Optional[int]
+    source: str
+    shoe: Optional[dict]              # {id, brand, model, nickname} or None
+    strava_activity_id: Optional[int]
 
 
-def _period_key(activity: StravaActivity, period: str) -> Optional[str]:
-    d = activity.run_date
-    if d is None:
-        return None
+def _period_key(d: date, period: str) -> str:
     if period == "weekly":
         iso = d.isocalendar()
         return f"{iso[0]}-W{iso[1]:02d}"
@@ -60,33 +64,29 @@ def _period_key(activity: StravaActivity, period: str) -> Optional[str]:
 
 def training_summary(db: Session, period: str = "monthly") -> list[PeriodSummary]:
     """
-    Aggregate run history by week or month, newest period first. Pace is a
-    distance-weighted average via total moving time / total distance; HR is a
-    simple mean over runs that recorded it.
+    Aggregate the unioned run history by week or month, newest period first.
+    Pace is a distance-weighted average via total moving time / total distance
+    (moving time reconstructed from average pace for runs that lack it); HR is
+    a simple mean over runs that recorded it.
     """
     if period not in ("weekly", "monthly"):
         raise ValueError("period must be 'weekly' or 'monthly'")
 
-    runs = (
-        db.query(StravaActivity)
-        .filter(StravaActivity.activity_type == "Run")
-        .all()
-    )
+    runs = activities_svc.unified_activities(db)
 
     buckets: dict[str, dict] = {}
     for r in runs:
-        key = _period_key(r, period)
-        if key is None:
-            continue
-        b = buckets.setdefault(key, {"km": 0.0, "count": 0, "moving_s": 0, "hr_sum": 0, "hr_n": 0, "elev": 0.0})
+        key = _period_key(r.date, period)
+        b = buckets.setdefault(key, {"km": 0.0, "count": 0, "moving_s": 0.0, "hr_sum": 0, "hr_n": 0, "elev": 0.0})
         b["km"] += r.distance_km or 0.0
         b["count"] += 1
-        if r.moving_time_s and r.distance_km:
-            b["moving_s"] += r.moving_time_s
+        moving_s = _effective_moving_s(r)
+        if moving_s:
+            b["moving_s"] += moving_s
         if r.avg_hr is not None:
             b["hr_sum"] += r.avg_hr
             b["hr_n"] += 1
-        b["elev"] += r.elevation_gain_m or 0.0
+        b["elev"] += r.elevation_m or 0.0
 
     out = []
     for key in sorted(buckets, reverse=True):
@@ -108,18 +108,15 @@ def training_summary(db: Session, period: str = "monthly") -> list[PeriodSummary
 
 def personal_bests(db: Session) -> list[PersonalBest]:
     """
-    Fastest average pace within each distance band. These are whole-activity
-    average-pace bests, not true segment PBs — name/describe accordingly.
+    Fastest average pace within each distance band, across the unioned run
+    history. These are whole-activity average-pace bests, not true segment PBs
+    — name/describe accordingly. Shoe attribution is included when the winning
+    run is linked to an owned shoe.
     """
-    runs = (
-        db.query(StravaActivity)
-        .filter(
-            StravaActivity.activity_type == "Run",
-            StravaActivity.avg_pace_s_per_km.isnot(None),
-            StravaActivity.distance_km.isnot(None),
-        )
-        .all()
-    )
+    runs = [
+        r for r in activities_svc.unified_activities(db)
+        if r.avg_pace_s_per_km is not None and r.distance_km
+    ]
 
     out = []
     for label, target, tol in PB_BANDS:
@@ -130,11 +127,22 @@ def personal_bests(db: Session) -> list[PersonalBest]:
         out.append(PersonalBest(
             band=label,
             target_km=target,
-            strava_activity_id=best.strava_activity_id,
-            run_date=best.run_date.isoformat() if best.run_date else None,
+            run_date=best.date.isoformat() if best.date else None,
             name=best.name,
             distance_km=round(best.distance_km, 2),
             avg_pace=rotation.seconds_to_pace(best.avg_pace_s_per_km),
             avg_hr=best.avg_hr,
+            source=best.source,
+            shoe=(
+                {
+                    "id": best.shoe.id,
+                    "brand": best.shoe.brand,
+                    "model": best.shoe.model,
+                    "nickname": best.shoe.nickname,
+                }
+                if best.shoe
+                else None
+            ),
+            strava_activity_id=best.strava_activity_id,
         ))
     return out
