@@ -24,7 +24,13 @@ export function formatPercent(value) {
 /** Format an ISO datetime into a short, human-friendly local string. */
 export function formatDate(value, opts = {}) {
   if (!value) return '—'
-  const date = new Date(value)
+  // A bare calendar date ("2026-07-02") is parsed by Date as UTC midnight,
+  // which then renders as the previous day in western timezones. Treat those
+  // as local dates so a run's date shows the day it actually happened.
+  const date =
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? new Date(`${value}T00:00:00`)
+      : new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleDateString('en-CA', {
     year: 'numeric',

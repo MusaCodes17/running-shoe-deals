@@ -149,6 +149,12 @@ export const ownedShoesApi = {
 export const trainingApi = {
   summary: (period = 'monthly') =>
     client.get('/api/training/summary', { params: { period } }).then((r) => r.data),
+  records: () => client.get('/api/training/records').then((r) => r.data),
+}
+
+// ============== ACTIVITIES (unified run feed) ==============
+export const activitiesApi = {
+  list: (params) => client.get('/api/activities', { params }).then((r) => r.data),
 }
 
 // ============== STRAVA ==============

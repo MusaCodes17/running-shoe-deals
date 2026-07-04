@@ -11,6 +11,7 @@ import {
   trainingApi,
   stravaApi,
   watchlistApi,
+  activitiesApi,
   SCRAPE_STREAM_URL,
 } from '@/services/api'
 
@@ -32,8 +33,10 @@ export const queryKeys = {
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   corosSyncStatus: () => ['coros', 'sync-status'],
   trainingSummary: (period) => ['training', 'summary', period],
+  trainingRecords: () => ['training', 'records'],
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
+  activities: (params) => ['activities', params ?? {}],
 }
 
 // ============== SHOES ==============
@@ -211,6 +214,22 @@ export function useTrainingSummary(period = 'monthly') {
   return useQuery({
     queryKey: queryKeys.trainingSummary(period),
     queryFn: () => trainingApi.summary(period),
+  })
+}
+
+export function useTrainingRecords() {
+  return useQuery({
+    queryKey: queryKeys.trainingRecords(),
+    queryFn: () => trainingApi.records(),
+  })
+}
+
+// ============== ACTIVITIES ==============
+export function useActivities(params) {
+  return useQuery({
+    queryKey: queryKeys.activities(params),
+    queryFn: () => activitiesApi.list(params),
+    keepPreviousData: true,
   })
 }
 
