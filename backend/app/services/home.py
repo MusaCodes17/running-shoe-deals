@@ -24,13 +24,10 @@ from typing import List, Optional
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
-from app.models.models import Deal, OwnedShoe, Retailer, Shoe
+from app.models.models import Deal, Retailer
 from app.services import activities as activities_svc
+from app.services import rotation as rotation_svc
 from app.services import settings as settings_svc
-
-# A shoe enters the "alerts" module once it has burned this fraction of its
-# user-set mileage limit — the retirement pipeline threshold from §4.
-ALERT_THRESHOLD = 0.75
 
 
 @dataclass
@@ -150,47 +147,23 @@ def _training_pulse(db: Session, today: date) -> TrainingPulse:
 def _shoe_alerts(db: Session) -> List[ShoeAlert]:
     """Active rotation shoes at/over 75% of their mileage limit, worst first.
 
-    Replacement-deal count is the number of active deals on a tracked `Shoe`
-    of the same shoe_type — a heuristic bridge between the rotation domain and
-    the deals domain (there is no FK between owned_shoes and shoes)."""
-    shoes = (
-        db.query(OwnedShoe)
-        .filter(OwnedShoe.status == "active", OwnedShoe.mileage_limit.isnot(None))
-        .all()
-    )
-
-    # Active-deal counts per tracked shoe_type, computed once.
-    deals_by_type: dict[str, int] = {}
-    for shoe_type, cnt in (
-        db.query(Shoe.shoe_type, func.count(Deal.id))
-        .join(Deal, Deal.shoe_id == Shoe.id)
-        .filter(Deal.is_active == True, Shoe.shoe_type.isnot(None))  # noqa: E712
-        .group_by(Shoe.shoe_type)
-        .all()
-    ):
-        deals_by_type[shoe_type.lower()] = cnt
-
-    alerts: List[ShoeAlert] = []
-    for s in shoes:
-        if not s.mileage_limit:
-            continue
-        pct = s.current_mileage / s.mileage_limit
-        if pct < ALERT_THRESHOLD:
-            continue
-        replacements = deals_by_type.get(s.shoe_type.lower(), 0) if s.shoe_type else 0
-        alerts.append(ShoeAlert(
-            id=s.id,
-            brand=s.brand,
-            model=s.model,
-            nickname=s.nickname,
-            current_mileage=round(s.current_mileage, 1),
-            mileage_limit=round(s.mileage_limit, 1),
-            pct=round(pct, 4),
-            replacement_deals=replacements,
-        ))
-
-    alerts.sort(key=lambda a: a.pct, reverse=True)  # closest to (or past) the limit first
-    return alerts
+    Thin projection over the shared ``rotation.retirement_pipeline`` — the same
+    computation backs the /shoes lifecycle view, so Home and Shoes never
+    disagree about which shoes are past the threshold or how many replacement
+    deals exist."""
+    return [
+        ShoeAlert(
+            id=e.shoe.id,
+            brand=e.shoe.brand,
+            model=e.shoe.model,
+            nickname=e.shoe.nickname,
+            current_mileage=e.current_mileage,
+            mileage_limit=e.mileage_limit,
+            pct=e.pct,
+            replacement_deals=e.replacement_deals,
+        )
+        for e in rotation_svc.retirement_pipeline(db)
+    ]
 
 
 def _top_deals(db: Session, limit: int = 3) -> List[TopDeal]:

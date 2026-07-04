@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
+import BrandMark from '@/components/layout/BrandMark'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -77,8 +78,8 @@ function SettingsLink({ onNavigate }) {
 function Brand() {
   return (
     <div className="flex items-center gap-[11px] px-2">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary">
-        <span className="h-[11px] w-[11px] rotate-45 rounded-[2px] bg-background" />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-background">
+        <BrandMark className="h-[19px] w-[19px]" />
       </span>
       <span className="font-heading text-[19px] font-extrabold tracking-tight text-foreground">
         Anton

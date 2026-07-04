@@ -50,6 +50,33 @@ def get_owned_shoes(status_filter: str = None, db: Session = Depends(get_db)):
     return shoes
 
 
+@router.get("/rotation-overview")
+def rotation_overview(db: Session = Depends(get_db)):
+    """
+    Retirement pipeline for the /shoes lifecycle view: active shoes at/over 75%
+    of their mileage_limit, worst first, each with a replacement-deal count.
+
+    Deliberately id-keyed and lightweight — the page already has full shoe
+    objects from GET /owned-shoes and groups them by type client-side; this
+    supplies only the server-computed pieces (pipeline membership + replacement
+    hints), the same computation that backs the Home shoe-alerts module.
+    """
+    pipeline = rotation.retirement_pipeline(db)
+    return {
+        "threshold": rotation.RETIREMENT_THRESHOLD,
+        "pipeline": [
+            {
+                "owned_shoe_id": e.shoe.id,
+                "pct": e.pct,
+                "current_mileage": e.current_mileage,
+                "mileage_limit": e.mileage_limit,
+                "replacement_deals": e.replacement_deals,
+            }
+            for e in pipeline
+        ],
+    }
+
+
 @router.get("/{owned_shoe_id}", response_model=OwnedShoeResponse)
 def get_owned_shoe(owned_shoe_id: int, db: Session = Depends(get_db)):
     """Get a specific owned shoe by ID"""

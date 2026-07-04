@@ -143,6 +143,7 @@ export const ownedShoesApi = {
   addNote: (id, data) => client.post(`/api/owned-shoes/${id}/notes`, data).then((r) => r.data),
   deleteNote: (noteId) => client.delete(`/api/owned-shoes/notes/${noteId}`).then((r) => r.data),
   replacementDeals: (id) => client.get(`/api/owned-shoes/${id}/replacement-deals`).then((r) => r.data),
+  rotationOverview: () => client.get('/api/owned-shoes/rotation-overview').then((r) => r.data),
 }
 
 // ============== TRAINING ==============

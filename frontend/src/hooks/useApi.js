@@ -31,6 +31,7 @@ export const queryKeys = {
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
   shoeNotes: (id) => ['owned-shoes', id, 'notes'],
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
+  rotationOverview: () => ['owned-shoes', 'rotation-overview'],
   corosSyncStatus: () => ['coros', 'sync-status'],
   trainingSummary: (period) => ['training', 'summary', period],
   trainingRecords: () => ['training', 'records'],
@@ -282,6 +283,16 @@ export function useOwnedShoes(params) {
   return useQuery({
     queryKey: queryKeys.ownedShoes(params),
     queryFn: () => ownedShoesApi.list(params),
+  })
+}
+
+// Retirement pipeline (server-computed: which active shoes are past 75% of
+// their limit + replacement-deal counts). Invalidated by the shared
+// ['owned-shoes'] key on any rotation mutation.
+export function useRotationOverview() {
+  return useQuery({
+    queryKey: queryKeys.rotationOverview(),
+    queryFn: () => ownedShoesApi.rotationOverview(),
   })
 }
 

@@ -1,8 +1,51 @@
 # Running Shoe Deal Finder - Project State 📋
 
-**Last Updated:** 2026-06-25
-**Project Status:** Phase 5 In Progress
+**Last Updated:** 2026-07-04
+**Project Status:** Anton redesign — Phase 5 backlog (started)
 **Current Focus:** Product images, colorway consolidation, scraper durability + coverage
+
+---
+
+## 🆕 Anton redesign Phase 5 — true app mark for Anton — 2026-07-04
+
+**[ADDED] A real logo mark: a forward-leaning "A" monogram, replacing the placeholder diamond.**
+- New `frontend/src/components/layout/BrandMark.jsx` — an italic "A" (apex shifted right of its
+  base so the letter leans into a stride) with the crossbar drawn as a motion line that overshoots
+  the right leg into a trail. Strokes use `currentColor`, so callers pick the colour.
+- Wired into `Layout.jsx` `Brand` (green `bg-primary` tile, `text-background` strokes — same
+  negative-space treatment as before, real glyph now) for both the desktop sidebar and mobile top
+  bar. Legible at 28px.
+- `public/favicon.svg` replaced (was a pulse-line) with the matching mark: green rounded tile +
+  dark "A". `index.html` already points at it.
+- Nav active/inactive **diamond dots left as-is** — they're a functional indicator motif, not the
+  logo. Verified desktop + ~380px, `vite build` clean, 0 console errors.
+
+---
+
+## 🆕 Anton redesign Phase 5 — `/shoes` lifecycle reframe — 2026-07-04
+
+**[ADDED] Retirement pipeline + group-by-type on `/shoes`; shared server-side pipeline computation.**
+- New `rotation.retirement_pipeline(db, threshold=0.75)` + `rotation.active_deal_counts_by_type(db)`
+  in `app/services/rotation.py` — the single authoritative "which active shoes are ≥75% of their
+  `mileage_limit`, worst-first, and how many replacement deals exist" computation. Replacement deals
+  are the heuristic §4 bridge: active deals on a tracked `Shoe` of the same `shoe_type` (no FK).
+- **[REFACTORED]** `home._shoe_alerts` is now a thin projection over `retirement_pipeline` (dropped
+  its duplicated query + local `ALERT_THRESHOLD`), so the Home shoe-alerts module and the Shoes page
+  can never disagree about thresholds/ordering/counts.
+- New thin endpoint `GET /api/owned-shoes/rotation-overview` → `{threshold, pipeline[]}` where each
+  entry is `{owned_shoe_id, pct, current_mileage, mileage_limit, replacement_deals}`. Deliberately
+  id-keyed/lightweight — the page already has full shoe rows from `GET /owned-shoes` and groups them
+  by type client-side (trivial); the endpoint supplies only the server-computed pieces (API-first §2.1).
+- Frontend (`pages/MyShoes.jsx`): active rotation now renders **grouped by shoe type** (groups ordered
+  like the type filter, `Uncategorized` last; header = label · count · total km) with a **Retirement
+  pipeline** band above it (`RetirementPipeline`/`PipelineRow`, worst-first, red/warning mileage bar,
+  pct badge, "N replacement deals" button deep-linking to `/deals`; pipeline shoes still appear in
+  their type group — the band is an attention surface, not a move). `useRotationOverview` hook +
+  `ownedShoesApi.rotationOverview`. "Add a shoe" is now a full-width button below the groups.
+- Tests: `tests/test_rotation_overview.py` (6) — threshold + boundary (exactly 75% included),
+  worst-first ordering, replacement-deal counting (type-scoped, active-only, case-insensitive),
+  untyped→0, empty pipeline. Full suite 69 passed. Desktop (grouped) + ~380px (stacked) pass, 0
+  console errors.
 
 ---
 

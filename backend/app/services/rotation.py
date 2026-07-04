@@ -12,9 +12,14 @@ from typing import Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models.models import OwnedShoe, PriceRecord, Shoe, ShoeNote, ShoeRun
+from app.models.models import Deal, OwnedShoe, PriceRecord, Shoe, ShoeNote, ShoeRun
 
 CHECKPOINT_INTERVAL_KM = 100
+
+# A shoe enters the "retirement pipeline" once it has burned this fraction of
+# its user-set mileage_limit — the §4 attention threshold, shared by the Home
+# shoe-alerts module and the /shoes lifecycle view so both agree.
+RETIREMENT_THRESHOLD = 0.75
 
 
 @dataclass
@@ -22,6 +27,16 @@ class LifetimeStats:
     lifetime_avg_pace: Optional[str]  # "M:SS/km"
     lifetime_avg_hr: Optional[int]
     total_runs: int
+
+
+@dataclass
+class PipelineEntry:
+    """A shoe in the retirement pipeline, with its replacement-deal hint."""
+    shoe: OwnedShoe
+    pct: float                    # current_mileage / mileage_limit, 0..1+
+    current_mileage: float
+    mileage_limit: float
+    replacement_deals: int        # active deals on a tracked shoe of the same type
 
 
 @dataclass
@@ -93,6 +108,61 @@ def cost_per_km(shoe: OwnedShoe) -> Optional[float]:
     if shoe.purchase_price and shoe.current_mileage > 0:
         return round(shoe.purchase_price / shoe.current_mileage, 2)
     return None
+
+
+def active_deal_counts_by_type(db: Session) -> dict[str, int]:
+    """
+    Number of active deals per tracked-shoe `shoe_type`, keyed lowercase.
+
+    A heuristic bridge between the rotation domain and the deals domain: there
+    is no FK between owned_shoes and shoes, so a "replacement deal" is any
+    active deal on a tracked Shoe of the same shoe_type.
+    """
+    counts: dict[str, int] = {}
+    for shoe_type, cnt in (
+        db.query(Shoe.shoe_type, func.count(Deal.id))
+        .join(Deal, Deal.shoe_id == Shoe.id)
+        .filter(Deal.is_active == True, Shoe.shoe_type.isnot(None))  # noqa: E712
+        .group_by(Shoe.shoe_type)
+        .all()
+    ):
+        counts[shoe_type.lower()] = cnt
+    return counts
+
+
+def retirement_pipeline(
+    db: Session, threshold: float = RETIREMENT_THRESHOLD
+) -> list[PipelineEntry]:
+    """
+    Active rotation shoes at/over ``threshold`` of their mileage_limit, worst
+    (closest to or past the limit) first, each annotated with a count of
+    matching replacement deals. Shoes without a mileage_limit are excluded —
+    there is no limit to be a fraction of.
+    """
+    shoes = (
+        db.query(OwnedShoe)
+        .filter(OwnedShoe.status == "active", OwnedShoe.mileage_limit.isnot(None))
+        .all()
+    )
+    counts = active_deal_counts_by_type(db)
+
+    out: list[PipelineEntry] = []
+    for s in shoes:
+        if not s.mileage_limit:
+            continue
+        pct = s.current_mileage / s.mileage_limit
+        if pct < threshold:
+            continue
+        out.append(PipelineEntry(
+            shoe=s,
+            pct=round(pct, 4),
+            current_mileage=round(s.current_mileage, 1),
+            mileage_limit=round(s.mileage_limit, 1),
+            replacement_deals=counts.get(s.shoe_type.lower(), 0) if s.shoe_type else 0,
+        ))
+
+    out.sort(key=lambda e: e.pct, reverse=True)
+    return out
 
 
 def find_matched_image(db: Session, brand: str, model: str) -> Optional[str]:
