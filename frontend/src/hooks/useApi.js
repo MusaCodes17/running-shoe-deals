@@ -9,6 +9,7 @@ import {
   ownedShoesApi,
   corosSyncApi,
   trainingApi,
+  stravaApi,
   SCRAPE_STREAM_URL,
 } from '@/services/api'
 
@@ -30,6 +31,7 @@ export const queryKeys = {
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   corosSyncStatus: () => ['coros', 'sync-status'],
   trainingSummary: (period) => ['training', 'summary', period],
+  stravaStatus: () => ['strava', 'status'],
 }
 
 // ============== SHOES ==============
@@ -207,6 +209,14 @@ export function useTrainingSummary(period = 'monthly') {
   return useQuery({
     queryKey: queryKeys.trainingSummary(period),
     queryFn: () => trainingApi.summary(period),
+  })
+}
+
+// ============== STRAVA ==============
+export function useStravaStatus() {
+  return useQuery({
+    queryKey: queryKeys.stravaStatus(),
+    queryFn: () => stravaApi.status(),
   })
 }
 
