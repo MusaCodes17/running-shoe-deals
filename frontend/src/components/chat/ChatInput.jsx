@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Send, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { authHeaders } from '@/services/api'
 
 // ── Resource picker dropdown ──────────────────────────────────────────────────
 
@@ -128,7 +129,7 @@ export default function ChatInput({
     if (resources || resourcesLoading) return
     setResourcesLoading(true)
     try {
-      const res = await fetch('/api/chat/resources')
+      const res = await fetch('/api/chat/resources', { headers: authHeaders() })
       const data = await res.json()
       setResources(data)
     } catch {
@@ -171,7 +172,7 @@ export default function ChatInput({
     try {
       const res = await fetch('/api/chat/resource/read', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ uri }),
       })
       if (!res.ok) throw new Error('fetch failed')

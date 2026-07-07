@@ -10,6 +10,35 @@ const client = axios.create({
   timeout: 120000, // scraping can be slow
 })
 
+// R2.1 bearer token. Baked into the build via VITE_ANTON_SECRET (must equal the
+// backend's ANTON_SECRET) — see SECURITY_PASS_PLAN §8 Q1. Undefined in dev if no
+// frontend/.env: warn once and continue so dev isn't hard-blocked (requests will
+// 401 until the token is set, rather than failing to compile).
+export const ANTON_SECRET = import.meta.env.VITE_ANTON_SECRET
+if (!ANTON_SECRET) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    'VITE_ANTON_SECRET is not set — API requests are unauthenticated and will ' +
+      '401 once R2.1 auth is active. Set it in frontend/.env (same value as the ' +
+      "backend's ANTON_SECRET)."
+  )
+}
+
+// Single source of the auth header for the non-axios request paths (the chat
+// fetch() calls and the scrape SSE fetch stream, which can't ride the axios
+// interceptor). Returns {} when no token so callers can spread unconditionally.
+export function authHeaders() {
+  return ANTON_SECRET ? { Authorization: `Bearer ${ANTON_SECRET}` } : {}
+}
+
+// Inject the bearer token on every axios request.
+client.interceptors.request.use((config) => {
+  if (ANTON_SECRET) {
+    config.headers.Authorization = `Bearer ${ANTON_SECRET}`
+  }
+  return config
+})
+
 // Normalize errors so the UI gets a readable message regardless of shape.
 client.interceptors.response.use(
   (response) => response,

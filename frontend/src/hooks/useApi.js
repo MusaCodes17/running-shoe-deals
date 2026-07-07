@@ -15,6 +15,7 @@ import {
   racesApi,
   homeApi,
   SCRAPE_STREAM_URL,
+  authHeaders,
 } from '@/services/api'
 
 // Centralized query keys so mutations can invalidate precisely.
@@ -471,11 +472,11 @@ export function useScrapeStream() {
   const qc = useQueryClient()
   const [isRunning, setIsRunning] = useState(false)
   const [connectionLost, setConnectionLost] = useState(false)
-  const esRef = useRef(null)
+  const abortRef = useRef(null)
 
   const closeStream = useCallback(() => {
-    esRef.current?.close()
-    esRef.current = null
+    abortRef.current?.abort()
+    abortRef.current = null
   }, [])
 
   // Opens the SSE connection and wires up its handlers. Used both for a job
@@ -483,20 +484,18 @@ export function useScrapeStream() {
   // stream replays full history to any subscriber, so reattaching after e.g.
   // a page reload picks up exactly where the real job actually is, instead
   // of just reporting "already in progress" with no way to see it finish).
+  //
+  // This reads the SSE over fetch() rather than a native EventSource because
+  // EventSource cannot send an Authorization header, and R2.1 requires the
+  // bearer token on /api/scrape/stream like every other endpoint. The frame
+  // parsing mirrors useChatStream (split on blank lines, take `data:` lines).
   const attachStream = useCallback(
     (onEvent) => {
       setIsRunning(true)
-      const es = new EventSource(SCRAPE_STREAM_URL)
-      esRef.current = es
+      const controller = new AbortController()
+      abortRef.current = controller
 
-      es.onmessage = (e) => {
-        let event
-        try {
-          event = JSON.parse(e.data)
-        } catch {
-          return
-        }
-
+      const handleEvent = (event) => {
         if (event.type === 'retailer_done') {
           qc.setQueriesData({ queryKey: ['retailers'] }, (old) => {
             if (!Array.isArray(old)) return old
@@ -523,11 +522,55 @@ export function useScrapeStream() {
         }
       }
 
-      es.onerror = () => {
-        closeStream()
-        setIsRunning(false)
-        setConnectionLost(true)
-      }
+      ;(async () => {
+        try {
+          const res = await fetch(SCRAPE_STREAM_URL, {
+            headers: authHeaders(),
+            signal: controller.signal,
+          })
+          if (!res.ok || !res.body) throw new Error(`stream failed (${res.status})`)
+
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const parts = buffer.split(/\r?\n\r?\n/)
+            buffer = parts.pop() ?? ''
+            for (const part of parts) {
+              for (const line of part.split(/\r?\n/)) {
+                if (!line.startsWith('data:')) continue
+                const raw = line.slice(line.indexOf(':') + 1).trim()
+                if (!raw) continue
+                let event
+                try {
+                  event = JSON.parse(raw)
+                } catch {
+                  continue
+                }
+                handleEvent(event)
+              }
+            }
+          }
+
+          // Server closed the stream without a 'completed' event (handleEvent
+          // aborts the controller on 'completed', so reaching here while still
+          // running means the connection dropped) — surface it like the old
+          // EventSource onerror did.
+          setIsRunning((running) => {
+            if (running) setConnectionLost(true)
+            return false
+          })
+        } catch (err) {
+          if (controller.signal.aborted) return // intentional close (completed/unmount)
+          closeStream()
+          setIsRunning(false)
+          setConnectionLost(true)
+        }
+      })()
     },
     [qc, closeStream]
   )

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { authHeaders } from '@/services/api'
 
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
@@ -63,7 +64,7 @@ export function useChatStream({
       try {
         const res = await fetch('/api/chat/message', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ messages: updatedApiMessages, model }),
         })
 

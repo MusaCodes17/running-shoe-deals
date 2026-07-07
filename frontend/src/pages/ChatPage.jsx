@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { UserMessage, AssistantMessage, ModelDivider, EmptyState } from '@/components/chat/ChatMessages'
 import ChatInput from '@/components/chat/ChatInput'
 import { useChatStream } from '@/hooks/useChatStream'
+import { authHeaders } from '@/services/api'
 import {
   loadConversations,
   createConversation,
@@ -170,7 +171,7 @@ export default function ChatPage() {
 
   // Fetch provider/model list
   useEffect(() => {
-    fetch('/api/chat/providers')
+    fetch('/api/chat/providers', { headers: authHeaders() })
       .then((r) => r.json())
       .then(setProviders)
       .catch(() => {})
