@@ -13,6 +13,10 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Shoe, ShoeNote, ShoeRun
+# Pace formatting lives in the pure app.utils.pace module (R1.5c). Re-exported
+# so existing callers (rotation.pace_to_seconds / rotation.seconds_to_pace) keep
+# working; prefer importing from app.utils.pace directly in new code.
+from app.utils.pace import pace_to_seconds, seconds_to_pace  # noqa: F401
 
 CHECKPOINT_INTERVAL_KM = 100
 
@@ -46,22 +50,6 @@ class RunLogResult:
     shoe: OwnedShoe       # refreshed after commit
     checkpoint_reached: bool
     checkpoint_km: Optional[int]
-
-
-def pace_to_seconds(pace: str) -> Optional[float]:
-    """Parse a 'M:SS/km' pace string into total seconds. Returns None if unparseable."""
-    try:
-        mins_str, secs_str = pace.split('/')[0].strip().split(':')
-        return int(mins_str) * 60 + int(secs_str)
-    except (ValueError, AttributeError):
-        return None
-
-
-def seconds_to_pace(seconds: float) -> str:
-    """Format total seconds back into a 'M:SS/km' pace string."""
-    total = round(seconds)
-    mins, secs = divmod(total, 60)
-    return f"{mins}:{secs:02d}/km"
 
 
 def crossed_checkpoint(

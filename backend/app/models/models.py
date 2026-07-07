@@ -5,6 +5,7 @@ from sqlalchemy import BigInteger, Column, Integer, String, Float, Boolean, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.pace import seconds_to_pace  # pure util (R1.5c) — no layer inversion
 
 
 class Shoe(Base):
@@ -314,10 +315,7 @@ class ShoeRun(Base):
     @property
     def avg_pace(self):
         s = self.activity.avg_pace_s_per_km if self.activity else None
-        if s is None:
-            return None
-        mins, secs = divmod(round(s), 60)
-        return f"{mins}:{secs:02d}/km"
+        return seconds_to_pace(s) if s is not None else None
 
     def __repr__(self):
         return f"<ShoeRun activity={self.activity_id} shoe={self.owned_shoe_id}>"

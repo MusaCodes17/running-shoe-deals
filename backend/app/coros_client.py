@@ -10,6 +10,10 @@ from typing import Optional
 
 import requests
 
+# Pace formatting is the shared pure util (R1.5c); re-imported here so this
+# module's seconds_to_pace(...) calls keep working unchanged.
+from app.utils.pace import seconds_to_pace  # noqa: F401
+
 COROS_BASE_URL = "https://open.coros.com"
 RUNNING_SPORT_TYPES = {100, 101, 102, 103}
 
@@ -31,11 +35,6 @@ def get_coros_config() -> Optional[dict]:
         "open_id": open_id,
     }
 
-
-def seconds_to_pace(seconds_per_km: int) -> str:
-    """Convert a raw COROS avgPace value (seconds/km) to 'M:SS/km'."""
-    mins, secs = divmod(int(seconds_per_km), 60)
-    return f"{mins}:{secs:02d}/km"
 
 
 def fetch_running_activities(config: dict, days_back: int) -> list:
