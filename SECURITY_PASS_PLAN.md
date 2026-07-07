@@ -297,3 +297,73 @@ When R2.1 ships, record what actually happened in `docs/changelog.md` and move
 E1 from ⚠️ to Superseded in `docs/design_decisions.md`; leave this file as the
 historical plan (append-only, like REDESIGN_PLAN.md) rather than rewriting it to
 match the outcome.*
+
+---
+
+## 8. Addendum — §7 open questions resolved (Phase 2 Session D — 2026-07-07)
+
+*Appended at the start of the R2.1 implementation session, per the §7 instruction
+to "pick one and record the decision at the top of the R2.1 session." The §7 text
+above is left intact as the historical framing; this section is the binding
+resolution. Verified first-hand against the installed tooling on 2026-07-07.*
+
+### Q1 — How does the browser obtain the token? → **(a) build-time `VITE_ANTON_SECRET`**
+
+The SPA reads the token from `import.meta.env.VITE_ANTON_SECRET`, set in the same
+`.env` mechanism as `ANTON_SECRET`. Rationale exactly as §7(a): the bundle is
+served only to the trusted single user on the trusted machine, and anyone who can
+read the built JS can read `.env` anyway, so baking the secret into the bundle
+adds no attack surface under the LAN threat model (§1).
+
+The `/api/config` pre-auth endpoint (§7(b)) is **rejected**: it is complexity with
+no security gain here — it trades one baked-in secret for one more exempt endpoint
+that must itself be correctly IP-restricted, i.e. a *new* thing to get wrong, for
+a threat model where the secret's confidentiality on this machine isn't the
+concern. CORS follow-through (§4 task 5): the token rides an `Authorization`
+request header, not a cookie, so `allow_credentials` is **not** required for the
+token itself; the CORS tightening is done independently on its own merits.
+
+### Q2 — Does the installed `mcp-remote` support `--header`? → **Yes (0.1.38), no upgrade needed**
+
+Verified against the resolved package source (`mcp-remote@0.1.38`,
+`dist/chunk-65X3S4HB.js`): `parseCommandLineArgs` consumes `--header "<Name>: <Value>"`
+pairs (line ~20711), matching `^([A-Za-z0-9_-]+):\s*(.*)$` — so
+`--header "Authorization: Bearer <token>"` parses to header name `Authorization`,
+value `Bearer <token>`. It additionally supports `${ENV_VAR}` substitution inside
+the value (line ~20851), but we use the **literal token** in the Desktop config for
+determinism (Claude Desktop's launch environment does not reliably inherit the
+shell's `.env`). No version bump required; the current Desktop config uses an
+unpinned `npx mcp-remote`, which already resolves to a `--header`-capable version.
+
+- *Orthogonal caveat (not a blocker for R2.1):* this shell's Node is v19.4.0, on
+  which `npx mcp-remote` crashes at startup (`ReferenceError: File is not defined`,
+  an undici incompatibility). This is a **local-shell** issue, independent of
+  `--header` support and of Claude Desktop (which launches `mcp-remote` under its
+  own Node and works today). If Desktop sync ever fails post-rollout with that
+  error, the fix is a newer Node for Desktop's `npx`, not an auth change.
+
+### Q3 — Should the token be rotatable without restarting the SPA? → **No**
+
+One static secret; rotation is a deliberate, infrequent, multi-step operation, not
+a hot path. **Rotation procedure (documented here so a later session doesn't build
+hot-rotation by reflex):**
+
+1. Generate a new value: `python -c "import secrets; print(secrets.token_hex(32))"`.
+2. Set it as **both** `ANTON_SECRET` and `VITE_ANTON_SECRET` in `backend/.env` (and
+   `frontend/.env`), then update the Claude Desktop `mcp-remote` `--header` to the
+   same value.
+3. Restart the backend (fail-fast re-reads the secret) and rebuild / hard-reload
+   the SPA so the new value is baked into the served bundle.
+
+No localStorage token store, no refresh endpoint, no per-client keys. Revisit only
+if remote/third-party clients appear (R5.2), where revocation becomes a real need.
+
+### Q4 — Middleware vs. mount ordering for `/mcp` (resolved during implementation)
+
+A top-level Starlette middleware added with `app.add_middleware(...)` wraps the
+**entire** ASGI app, including the `app.mount("/mcp", ...)` sub-app, because the
+middleware stack sits outside the router that dispatches to mounts. So the one
+bearer check covers `/api/*` and `/mcp` uniformly. This is **asserted, not
+assumed**: `tests/test_auth.py` sends an un-tokened request to `/mcp` and requires
+a 401 (task 8). If that assertion ever regresses, the fallback is an equivalent
+check inside the MCP layer.
