@@ -55,6 +55,11 @@ frontend/src/
   services/api.js  the single axios client, grouped per domain
   lib/             pure helpers (no React, no fetch)
 docs/              the documentation suite + changelog.md
+.claude/skills/    13 workflow skills (S01–S13) — implemented per docs/skills_library.md:
+                   add-service-capability · add-api-endpoint · add-database-model ·
+                   data-migration · add-retailer · add-mcp-tool · ai-agent ·
+                   add-frontend-page · write-tests · refactor-service ·
+                   background-job · debugging · session-wrapup
 ```
 
 Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Root planning docs (`REDESIGN_PLAN.md` etc.) are citable references — code comments cite them as `§N` / `P3.4`.
@@ -200,3 +205,18 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 5. `docs/project_state.md` refreshed (§2 status table, §9 recent decisions, §11 priorities).
 6. Any reversed/new architectural decision recorded in `docs/design_decisions.md`.
 7. Commits: one per numbered task, phase-prefixed.
+
+---
+
+## 14. Invariants
+
+The checkable list. One line per invariant: what must hold → owning code path → covering test. The narrative behind each is `docs/domain_model.md` §4; this list is the canonical "never break these" reference (`docs/ai_context.md` §8 cites it; CLAUDE.md §6 remains the separate *mechanical traps* list). Verify the relevant lines whenever a session touches their paths.
+
+- **INV-1 · Mileage ledger:** `current_mileage = starting_mileage + Σ attributed distances` — maintained, never recomputed → `rotation.log_run` / `rotation.delete_run` → `tests/test_rotation.py` (increment) + `tests/test_activities_model.py` (delete round-trip). Known breach: writable via `PUT /owned-shoes/{id}` — refactor.md C1 / tech_debt P0-1.
+- **INV-2 · Single run writer:** every Activity + Attribution pair is born via `rotation.log_run` (escape hatches, never parallel paths) → `rotation.py` → no direct test of the "no parallel path" rule is possible; **documentation-only** — enforcement is convention + review (see refactor.md C1 for the one known breach).
+- **INV-3 · Attribution uniqueness:** at most one shoe per activity (`shoe_runs.activity_id` UNIQUE) → structural (DB constraint, migration `c3d4e5f6a7b8`) → exercised in `tests/test_activities_model.py`.
+- **INV-4 · Strava archive preservation:** `delete_run` on a `source='strava'` activity removes the attribution only; the archive row survives → `rotation.delete_run` → `tests/test_activities_model.py::test_delete_run_keeps_strava_archive`.
+- **INV-5 · Dedup — never count a run twice:** `strava_activity_id` UNIQUE; COROS keys on `coros_activity_id` with a date + distance-within-0.1 km fallback; re-confirm is a silent no-op → structural + `coros.confirm_run` / the Strava importer → `tests/test_strava_import.py` + `tests/test_activities_model.py::test_coros_dedup_on_activity_coros_id`.
+- **INV-6 · Deal qualification (B9-v2):** a deal exists iff `price < msrp` and `msrp IS NOT NULL`; savings measured against MSRP → `scrapers/orchestrator.py` (via `DealStore`) → `tests/test_deals.py` (3 tests — limited: retirement/requalification, the orphan guard, and promo rules remain uncovered; refactor.md H1/H2).
+- **INV-7 · Derived-never-stored:** cost/km, countdowns, retirement %, weekly volume are computed at read time, never persisted → convention across `services/`; blessed exceptions are the mileage ledger (INV-1) and the deal's qualifying-savings snapshot → no test — see `docs/design_decisions.md` B13.
+- **INV-8 · Confirmation gate:** no externally-sourced or AI-initiated run is logged without explicit human confirmation; no confidence exception → convention encoded in the MCP protocol (`sync_coros_runs` prompt; design_decisions C9) → no automated test; enforcement is prompt-and-review.

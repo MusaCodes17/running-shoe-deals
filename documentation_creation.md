@@ -431,8 +431,6 @@ Produce a final report recommending improvements to the documentation itself.
 
 # Phase 2 (Implementation)
 
-Do **not** begin implementation during Phase 1.
-
 Once all documentation has been reviewed and accepted:
 
 * Create implementation plans.
