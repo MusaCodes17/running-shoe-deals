@@ -26,8 +26,7 @@ from app.models.schemas import (
     CorosSyncStatus,
     OwnedShoeResponse,
 )
-from app.routers.owned_shoes import _attach_computed_fields
-from app.services import coros as coros_svc, settings as settings_svc
+from app.services import coros as coros_svc, rotation, settings as settings_svc
 
 router = APIRouter(prefix="/owned-shoes/sync-coros", tags=["coros-sync"])
 
@@ -107,6 +106,6 @@ def confirm_coros_runs(body: CorosConfirmRequest, db: Session = Depends(get_db))
             continue  # already logged — idempotent skip
 
         logged += 1
-        updated_shoes.append(_attach_computed_fields(db, result.shoe))
+        updated_shoes.append(rotation.attach_computed_fields(db, result.shoe))
 
     return CorosConfirmResponse(logged=logged, updated_shoes=updated_shoes)

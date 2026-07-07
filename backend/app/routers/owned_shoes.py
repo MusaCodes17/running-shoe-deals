@@ -18,22 +18,6 @@ from app.services import rotation
 
 router = APIRouter(prefix="/owned-shoes", tags=["owned-shoes"])
 
-# Re-exported so mcp_server.py and coros_sync.py can keep their existing imports
-# until Task D wires them to services directly.
-CHECKPOINT_INTERVAL_KM = rotation.CHECKPOINT_INTERVAL_KM
-
-
-def _attach_computed_fields(db: Session, shoe: OwnedShoe) -> OwnedShoe:
-    """Attach response-only fields (image match, lifetime stats, cost/km) that aren't real columns."""
-    shoe.matched_image_url = None if shoe.image_url else rotation.find_matched_image(db, shoe.brand, shoe.model)
-    stats = rotation.compute_lifetime_stats(db, shoe.id)
-    shoe.lifetime_avg_pace = stats.lifetime_avg_pace
-    shoe.lifetime_avg_hr = stats.lifetime_avg_hr
-    shoe.total_runs = stats.total_runs
-    shoe.cost_per_km = rotation.cost_per_km(shoe)
-    return shoe
-
-
 
 @router.get("/", response_model=List[OwnedShoeResponse])
 def get_owned_shoes(status_filter: str = None, db: Session = Depends(get_db)):
@@ -46,7 +30,7 @@ def get_owned_shoes(status_filter: str = None, db: Session = Depends(get_db)):
         query = query.filter(OwnedShoe.status == status_filter)
     shoes = query.order_by(OwnedShoe.created_at.desc()).all()
     for shoe in shoes:
-        _attach_computed_fields(db, shoe)
+        rotation.attach_computed_fields(db, shoe)
     return shoes
 
 
@@ -88,7 +72,7 @@ def get_owned_shoe(owned_shoe_id: int, db: Session = Depends(get_db)):
             detail=f"Owned shoe with id {owned_shoe_id} not found"
         )
 
-    _attach_computed_fields(db, shoe)
+    rotation.attach_computed_fields(db, shoe)
     return shoe
 
 
@@ -103,7 +87,7 @@ def create_owned_shoe(shoe: OwnedShoeCreate, db: Session = Depends(get_db)):
     db.add(db_shoe)
     db.commit()
     db.refresh(db_shoe)
-    return _attach_computed_fields(db, db_shoe)
+    return rotation.attach_computed_fields(db, db_shoe)
 
 
 @router.put("/{owned_shoe_id}", response_model=OwnedShoeResponse)
@@ -123,7 +107,7 @@ def update_owned_shoe(owned_shoe_id: int, shoe_update: OwnedShoeUpdate, db: Sess
 
     db.commit()
     db.refresh(db_shoe)
-    return _attach_computed_fields(db, db_shoe)
+    return rotation.attach_computed_fields(db, db_shoe)
 
 
 @router.delete("/{owned_shoe_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -167,7 +151,7 @@ def log_run(owned_shoe_id: int, run: ShoeRunCreate, db: Session = Depends(get_db
         updated_mileage=result.shoe.current_mileage,
         checkpoint_reached=result.checkpoint_reached,
         checkpoint_km=result.checkpoint_km,
-        shoe=_attach_computed_fields(db, result.shoe),
+        shoe=rotation.attach_computed_fields(db, result.shoe),
     )
 
 
@@ -203,7 +187,7 @@ def delete_shoe_run(run_id: int, db: Session = Depends(get_db)):
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
-    return _attach_computed_fields(db, db_shoe)
+    return rotation.attach_computed_fields(db, db_shoe)
 
 
 @router.get("/{owned_shoe_id}/replacement-deals")

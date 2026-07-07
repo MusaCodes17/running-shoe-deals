@@ -196,6 +196,25 @@ def find_matched_image(db: Session, brand: str, model: str) -> Optional[str]:
     return match[0] if match else None
 
 
+def attach_computed_fields(db: Session, shoe: OwnedShoe) -> OwnedShoe:
+    """
+    Attach response-only fields (image match, lifetime stats, cost/km) that
+    aren't real columns onto an OwnedShoe instance, in place, and return it.
+
+    This is the single home for owned-shoe response shaping — the REST routers
+    (owned_shoes) and the COROS-sync router both project through it so every
+    surface agrees on the derived numbers (CLAUDE.md §2). Derived-only: nothing
+    here is persisted (INV-7).
+    """
+    shoe.matched_image_url = None if shoe.image_url else find_matched_image(db, shoe.brand, shoe.model)
+    stats = compute_lifetime_stats(db, shoe.id)
+    shoe.lifetime_avg_pace = stats.lifetime_avg_pace
+    shoe.lifetime_avg_hr = stats.lifetime_avg_hr
+    shoe.total_runs = stats.total_runs
+    shoe.cost_per_km = cost_per_km(shoe)
+    return shoe
+
+
 def log_run(
     db: Session,
     owned_shoe_id: int,
