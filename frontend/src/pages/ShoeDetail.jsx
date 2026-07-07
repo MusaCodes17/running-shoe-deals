@@ -32,6 +32,7 @@ import { useToast } from '@/components/ui/toast'
 import {
   useOwnedShoe,
   useUpdateOwnedShoe,
+  useAdjustMileage,
   useShoeRuns,
   useDeleteShoeRun,
   useShoeNotes,
@@ -351,7 +352,7 @@ function Stat({ label, value }) {
 function AdjustMileageDialog({ shoe, open, onOpenChange }) {
   const [value, setValue] = useState('')
   const [confirming, setConfirming] = useState(false)
-  const update = useUpdateOwnedShoe()
+  const update = useAdjustMileage()
   const { toast } = useToast()
 
   const reset = () => {
@@ -365,7 +366,7 @@ function AdjustMileageDialog({ shoe, open, onOpenChange }) {
 
   const handleConfirm = () => {
     update.mutate(
-      { id: shoe.id, data: { current_mileage: parsed } },
+      { id: shoe.id, newMileage: parsed },
       {
         onSuccess: () => {
           toast({ variant: 'success', title: 'Mileage updated' })

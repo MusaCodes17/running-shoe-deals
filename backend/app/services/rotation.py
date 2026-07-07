@@ -314,6 +314,42 @@ def delete_run(db: Session, run_id: int) -> OwnedShoe:
     return shoe
 
 
+def adjust_mileage(db: Session, owned_shoe_id: int, new_mileage: float) -> OwnedShoe:
+    """
+    Manually override a shoe's current_mileage, recording the change as a
+    journal note so the resulting drift from the ledger identity is auditable.
+
+    This is the ONLY sanctioned way to set current_mileage to a value that is
+    not `starting_mileage + Σ attributed distances` (INV-1). It exists for
+    real-world corrections — a shoe worn on an untracked run, a bad import — and
+    is the third blessed exception to the single-write-path rule (domain_model
+    §4.5). The generic PUT /owned-shoes/{id} deliberately cannot touch the
+    ledger (C1 fix, 2026-07-07); this endpoint is the one door, and the note it
+    writes lets a later COROS/Strava reconciliation explain why the counter and
+    the run sum disagree.
+
+    Raises LookupError if the shoe doesn't exist; ValueError if new_mileage < 0.
+    """
+    if new_mileage < 0:
+        raise ValueError("new_mileage must be >= 0")
+
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+    if not shoe:
+        raise LookupError(f"Owned shoe with id {owned_shoe_id} not found")
+
+    old_mileage = shoe.current_mileage
+    shoe.current_mileage = new_mileage
+    db.add(ShoeNote(
+        owned_shoe_id=owned_shoe_id,
+        body=f"Mileage manually adjusted from {round(old_mileage, 1)} km to {round(new_mileage, 1)} km.",
+        triggered_by="mileage_adjustment",
+        mileage_at_note=new_mileage,
+    ))
+    db.commit()
+    db.refresh(shoe)
+    return shoe
+
+
 def add_note(
     db: Session,
     owned_shoe_id: int,

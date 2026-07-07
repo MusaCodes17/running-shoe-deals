@@ -256,18 +256,35 @@ class OwnedShoeCreate(OwnedShoeBase):
 
 
 class OwnedShoeUpdate(BaseModel):
-    """Schema for updating an owned shoe (all fields optional)"""
+    """
+    Schema for updating an owned shoe (all fields optional).
+
+    Deliberately omits `current_mileage` and `starting_mileage` (C1 fix,
+    2026-07-07): the mileage ledger is `current_mileage = starting_mileage +
+    Σ attributed distances` (INV-1) and may not be set through this blind
+    setattr path. `current_mileage` is corrected only via the sanctioned
+    POST /owned-shoes/{id}/adjust-mileage (rotation.adjust_mileage), which
+    records the override; `starting_mileage` is the ledger anchor, fixed at
+    creation. Any client that still sends either field has it silently ignored.
+    """
     brand: Optional[str] = Field(None, min_length=1, max_length=100)
     model: Optional[str] = Field(None, min_length=1, max_length=200)
     nickname: Optional[str] = Field(None, max_length=100)
     shoe_type: Optional[str] = Field(None, max_length=50)
     purchase_date: Optional[date] = None
-    starting_mileage: Optional[float] = Field(None, ge=0)
-    current_mileage: Optional[float] = Field(None, ge=0)
     status: Optional[str] = None
     purchase_price: Optional[float] = Field(None, gt=0)
     mileage_limit: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
+
+
+class MileageAdjust(BaseModel):
+    """
+    Body for POST /owned-shoes/{id}/adjust-mileage — a sanctioned manual
+    override of the mileage ledger, routed through rotation.adjust_mileage so
+    the drift from the run-sum identity is recorded (C1 fix).
+    """
+    new_mileage: float = Field(..., ge=0, description="The corrected current mileage, km")
 
 
 class OwnedShoeResponse(OwnedShoeBase):

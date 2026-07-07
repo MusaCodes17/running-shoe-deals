@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.models import (
-    OwnedShoe, OwnedShoeCreate, OwnedShoeUpdate, OwnedShoeResponse,
+    OwnedShoe, OwnedShoeCreate, OwnedShoeUpdate, OwnedShoeResponse, MileageAdjust,
     ShoeRun, ShoeRunCreate, ShoeRunResponse, LogRunResponse,
     ShoeNote, ShoeNoteCreate, ShoeNoteResponse,
 )
@@ -101,12 +101,38 @@ def update_owned_shoe(owned_shoe_id: int, shoe_update: OwnedShoeUpdate, db: Sess
             detail=f"Owned shoe with id {owned_shoe_id} not found"
         )
 
+    # OwnedShoeUpdate intentionally excludes current_mileage / starting_mileage
+    # (C1): the mileage ledger is not writable through this blind setattr loop.
+    # current_mileage corrections go through POST /{id}/adjust-mileage below.
     update_data = shoe_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_shoe, field, value)
 
     db.commit()
     db.refresh(db_shoe)
+    return rotation.attach_computed_fields(db, db_shoe)
+
+
+@router.post("/{owned_shoe_id}/adjust-mileage", response_model=OwnedShoeResponse)
+def adjust_owned_shoe_mileage(
+    owned_shoe_id: int, adjustment: MileageAdjust, db: Session = Depends(get_db)
+):
+    """
+    Manually override a shoe's current_mileage through the sanctioned ledger
+    path (rotation.adjust_mileage), which records the change as a journal note
+    so the drift from the run-sum identity stays auditable.
+
+    This is the only way to set current_mileage directly — the generic PUT
+    deliberately cannot (INV-1 / C1). Use for corrections like a shoe worn on
+    an untracked run.
+    """
+    try:
+        db_shoe = rotation.adjust_mileage(db, owned_shoe_id, adjustment.new_mileage)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     return rotation.attach_computed_fields(db, db_shoe)
 
 

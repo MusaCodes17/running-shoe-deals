@@ -353,6 +353,19 @@ export function useUpdateOwnedShoe() {
   })
 }
 
+// Sanctioned manual mileage override (C1). Records a journal note server-side,
+// so invalidate the shoe's notes list alongside the rotation queries.
+export function useAdjustMileage() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, newMileage }) => ownedShoesApi.adjustMileage(id, newMileage),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['owned-shoes'] })
+      qc.invalidateQueries({ queryKey: queryKeys.shoeNotes(id) })
+    },
+  })
+}
+
 export function useDeleteOwnedShoe() {
   const qc = useQueryClient()
   return useMutation({

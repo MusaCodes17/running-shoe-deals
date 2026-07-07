@@ -14,7 +14,6 @@ const empty = {
   purchase_date: '',
   purchase_price: '',
   starting_mileage: '0',
-  current_mileage: '',
   status: 'active',
   image_url: '',
 }
@@ -31,7 +30,6 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
           purchase_date: initial.purchase_date ?? '',
           purchase_price: initial.purchase_price != null ? String(initial.purchase_price) : '',
           starting_mileage: String(initial.starting_mileage ?? 0),
-          current_mileage: String(initial.current_mileage ?? 0),
           status: initial.status ?? 'active',
           image_url: initial.image_url ?? '',
         }
@@ -48,11 +46,6 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
     const startMileage = parseFloat(values.starting_mileage)
     if (values.starting_mileage !== '' && (Number.isNaN(startMileage) || startMileage < 0))
       next.starting_mileage = 'Enter a mileage of 0 or more'
-    if (initial && values.current_mileage !== '') {
-      const curMileage = parseFloat(values.current_mileage)
-      if (Number.isNaN(curMileage) || curMileage < 0)
-        next.current_mileage = 'Enter a mileage of 0 or more'
-    }
     if (values.purchase_price !== '') {
       const price = parseFloat(values.purchase_price)
       if (Number.isNaN(price) || price <= 0) next.purchase_price = 'Enter a price greater than 0'
@@ -72,9 +65,6 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
       starting_mileage: values.starting_mileage === '' ? 0 : parseFloat(values.starting_mileage),
       status: values.status,
       image_url: values.image_url.trim() || null,
-    }
-    if (initial && values.current_mileage !== '') {
-      payload.current_mileage = parseFloat(values.current_mileage)
     }
     return payload
   }
@@ -152,17 +142,6 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
             disabled={!!initial}
           />
         </Field>
-        {initial && (
-          <Field label="Current mileage (km)" error={errors.current_mileage}>
-            <Input
-              type="number"
-              step="0.1"
-              min="0"
-              value={values.current_mileage}
-              onChange={set('current_mileage')}
-            />
-          </Field>
-        )}
       </div>
 
       <Field

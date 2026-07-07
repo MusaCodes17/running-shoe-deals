@@ -135,6 +135,8 @@ export const ownedShoesApi = {
   get: (id) => client.get(`/api/owned-shoes/${id}`).then((r) => r.data),
   create: (data) => client.post('/api/owned-shoes/', data).then((r) => r.data),
   update: (id, data) => client.put(`/api/owned-shoes/${id}`, data).then((r) => r.data),
+  adjustMileage: (id, new_mileage) =>
+    client.post(`/api/owned-shoes/${id}/adjust-mileage`, { new_mileage }).then((r) => r.data),
   remove: (id) => client.delete(`/api/owned-shoes/${id}`).then((r) => r.data),
   logRun: (id, data) => client.post(`/api/owned-shoes/${id}/log-run`, data).then((r) => r.data),
   runs: (id) => client.get(`/api/owned-shoes/${id}/runs`).then((r) => r.data),
