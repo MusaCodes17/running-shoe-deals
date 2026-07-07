@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from app.database import init_db
 from app.mcp_server import mcp
+from app.middleware.auth import BearerAuthMiddleware
 from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home
 
 # Load environment variables
@@ -57,6 +58,12 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Bearer-token auth (R2.1). Added BEFORE CORS so that CORS is the *outer* wrapper
+# (Starlette's add_middleware makes the last-added middleware outermost): a 401
+# from auth then still gets CORS headers, so the browser surfaces a clean 401
+# rather than an opaque CORS error. See app/middleware/auth.py.
+app.add_middleware(BearerAuthMiddleware)
 
 # Configure CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
@@ -107,6 +114,14 @@ def read_root():
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
+    return {"status": "healthy"}
+
+
+# API-namespaced liveness alias — exempt from auth (see app/middleware/auth.py
+# PUBLIC_PATHS) so a monitor or the SPA can probe liveness without the token.
+@app.get("/api/health")
+def api_health_check():
+    """Liveness probe under the /api prefix. Public (no token required)."""
     return {"status": "healthy"}
 
 
