@@ -4,7 +4,7 @@ tracking) — separate from app/routers/shoes.py, which is for deal tracking.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 from typing import List, Optional
 
 from app.database import get_db
@@ -185,6 +185,7 @@ def get_shoe_runs(owned_shoe_id: int, db: Session = Depends(get_db)):
     return (
         db.query(ShoeRun)
         .join(Activity, ShoeRun.activity_id == Activity.id)
+        .options(contains_eager(ShoeRun.activity))
         .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
         .order_by(Activity.run_date.desc(), ShoeRun.created_at.desc())
         .all()

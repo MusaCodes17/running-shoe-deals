@@ -281,6 +281,12 @@ class ShoeRun(Base):
     # Read-only proxies to the canonical activity — so response schemas
     # (ShoeRunResponse via from_attributes) and any run-field reader keep
     # working now that run data lives on `activities` (§3 Phase-5).
+    #
+    # WARNING: distance_km, run_date, source, avg_pace, avg_hr, notes,
+    # coros_activity_id are property proxies onto self.activity.
+    # They trigger a lazy load per row if activity is not eager-loaded.
+    # Use joinedload/contains_eager(ShoeRun.activity) at every list query seam.
+    # They also CANNOT be used in .filter() — query Activity columns instead.
     @property
     def distance_km(self):
         return self.activity.distance_km if self.activity else None

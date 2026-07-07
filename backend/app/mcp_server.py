@@ -16,6 +16,7 @@ from typing import List, Optional
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP, Context
 from sqlalchemy import desc, func
+from sqlalchemy.orm import contains_eager
 
 from datetime import date as date_type, datetime, timezone
 
@@ -455,6 +456,7 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
         runs = (
             db.query(ShoeRun)
             .join(Activity, ShoeRun.activity_id == Activity.id)
+            .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
             .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
             .all()
@@ -649,6 +651,7 @@ async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
         runs = (
             db.query(ShoeRun)
             .join(Activity, ShoeRun.activity_id == Activity.id)
+            .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
             .order_by(Activity.run_date)
             .all()
@@ -1161,6 +1164,7 @@ def shoe_detail_resource(shoe_id: int) -> str:
         recent_runs = (
             db.query(ShoeRun)
             .join(Activity, ShoeRun.activity_id == Activity.id)
+            .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == shoe_id)
             .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
             .limit(5)
@@ -1227,6 +1231,7 @@ def shoe_runs_resource(shoe_id: int) -> str:
         runs = (
             db.query(ShoeRun)
             .join(Activity, ShoeRun.activity_id == Activity.id)
+            .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == shoe_id)
             .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
             .all()
