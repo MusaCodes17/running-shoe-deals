@@ -56,8 +56,32 @@ MCP_SERVERS: list[dict] = [
     {
         "name": "anton",
         "url": os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp"),
+        # This is the loopback self-connection: `url` points back at *this same*
+        # process's /mcp (dependency_graph §8.1). Once R2.1 auth is active, /mcp
+        # requires the bearer token, so this client must send it too — otherwise
+        # Son of Anton silently degrades to "no tools available". The token is
+        # attached per-connection by _server_headers() so it's read at connect
+        # time (robust to import ordering) and scoped to this loopback entry.
+        "auth_loopback": True,
     },
 ]
+
+
+def _server_headers(server: dict) -> dict | None:
+    """
+    Build the request headers for one MCP server connection.
+
+    Merges any static `headers` on the entry with the R2.1 bearer token for the
+    loopback self-connection (`auth_loopback`). Read from the environment *here*
+    (not at MCP_SERVERS definition time) because chat_service is imported before
+    main.py's load_dotenv() runs — reading ANTON_SECRET at import could capture an
+    empty value and silently 401 the loopback. Scoped to the flagged entry so the
+    secret is never sent to any future external MCP server.
+    """
+    headers = dict(server.get("headers") or {})
+    if server.get("auth_loopback"):
+        headers["Authorization"] = f"Bearer {os.getenv('ANTON_SECRET', '')}"
+    return headers or None
 
 # Single source of truth for the chat model catalog (R1.5d). Each entry names
 # its provider explicitly, so provider routing (_get_provider) and the
@@ -471,7 +495,7 @@ async def read_mcp_resource(uri: str) -> str:
                 await group.connect_to_server(
                     StreamableHttpParameters(
                         url=url,
-                        headers=server.get("headers"),
+                        headers=_server_headers(server),
                         timeout=timedelta(seconds=10),
                         sse_read_timeout=timedelta(seconds=30),
                     )
@@ -505,7 +529,7 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
                     await group.connect_to_server(
                         StreamableHttpParameters(
                             url=url,
-                            headers=server.get("headers"),
+                            headers=_server_headers(server),
                             timeout=timedelta(seconds=10),
                             sse_read_timeout=timedelta(seconds=300),
                         )
