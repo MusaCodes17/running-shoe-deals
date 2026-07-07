@@ -14,9 +14,11 @@ instead, across every entry point (REST + the MCP trigger_scrape tool).
 import threading
 from contextlib import contextmanager
 
-# Scheduling note: if scheduled scraping is added (roadmap R4.1),
-# this in-memory lock must be replaced with DB-level coordination
-# before APScheduler or any multi-process runner is introduced.
+# This is an in-memory threading.Lock — single-process only. It coordinates
+# scrapes within one uvicorn process and nothing more. Any move to multiple
+# workers or scheduled scraping (roadmap R4.1) requires replacing it with
+# DB-level coordination before APScheduler or a multi-process runner is
+# introduced. See design_decisions D4 (refuse-don't-queue) / D5 / E5.
 _scrape_lock = threading.Lock()
 
 
@@ -49,7 +51,31 @@ def try_acquire_scrape_lock() -> bool:
 
 
 def release_scrape_lock() -> None:
-    _scrape_lock.release()
+    """
+    Release the lock held by the current scrape.
+
+    Tolerant of an already-released lock: a double-release is a silent no-op,
+    not the RuntimeError a bare threading.Lock.release() would raise. That lets
+    a defensive `finally` (see scrape_runner.run_scrape_job) call it
+    unconditionally without risking a second exception masking the first.
+    """
+    if _scrape_lock.locked():
+        _scrape_lock.release()
+
+
+def force_release_scrape_lock() -> bool:
+    """
+    Operational escape hatch: release the lock if held, no-op if not, and
+    report which. Safe to call blind — it exists for the admin force-release
+    endpoint (POST /api/admin/scrape-lock/release) when a scrape wedges the
+    lock and the only alternative is a process restart. Because the lock is a
+    plain (unowned) threading.Lock, releasing it from a different thread than
+    the one that acquired it is permitted.
+    """
+    if _scrape_lock.locked():
+        _scrape_lock.release()
+        return True
+    return False
 
 
 def is_scrape_running() -> bool:

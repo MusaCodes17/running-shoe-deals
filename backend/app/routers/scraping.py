@@ -15,6 +15,7 @@ from app.scrape_state import scrape_state
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import (
     ScrapeInProgressError,
+    is_scrape_running,
     scrape_guard,
     try_acquire_scrape_lock,
 )
@@ -87,6 +88,17 @@ async def scrape_all_shoes(
 
     background_tasks.add_task(run_scrape_job, retailer_ids)
     return {"started": True}
+
+
+@router.get("/status", response_model=dict)
+def scrape_status():
+    """
+    Synchronous check of whether a scrape currently holds the process-wide
+    lock. The frontend tracks scrape progress via the SSE /scrape/stream, but
+    MCP and the admin surface need a plain request/response answer — e.g. to
+    decide whether the force-release escape hatch is warranted.
+    """
+    return {"scrape_running": is_scrape_running()}
 
 
 @router.get("/stream")

@@ -7,8 +7,28 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Deal, PriceRecord
 from app.scrapers.base_scraper import BaseScraper
+from app.scrapers.lock import force_release_scrape_lock
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.post("/scrape-lock/release", response_model=dict)
+def release_scrape_lock_endpoint():
+    """
+    Force-release the process-wide scrape lock. No-op if no scrape holds it;
+    releases it if one does. Returns {"was_held": bool}.
+
+    The operational escape hatch for a wedged lock (M3): the background scrape
+    job now releases the lock in a finally that covers its whole body, so a
+    wedge should no longer happen — but this endpoint stays as the recovery
+    door of last resort short of a process restart.
+
+    Auth note: intentionally unauthenticated *for now*, consistent with the
+    rest of the API under design_decisions E1. The security pass (R2.1) will
+    gate it behind the shared bearer token like every other mutation surface —
+    see SECURITY_PASS_PLAN.md §4.7.
+    """
+    return {"was_held": force_release_scrape_lock()}
 
 
 @router.post("/cleanup-kids-shoes", response_model=dict)

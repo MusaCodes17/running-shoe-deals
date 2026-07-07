@@ -67,29 +67,35 @@ async def run_scrape_job(retailer_ids: Optional[List[int]] = None) -> None:
     as a BackgroundTask — this function owns releasing it, in `finally`,
     along with resetting scrape_state.is_running, so both always happen
     exactly once no matter how this exits.
+
+    The entire body runs under that lock-releasing `finally` (M3 fix,
+    2026-07-07): the setup block below (shoe/retailer queries, promo
+    detection) used to sit *before* the try, so an exception there would exit
+    with the lock still held and wedge every subsequent scrape until a process
+    restart. Now any failure after acquisition still releases the lock.
     """
-    db = SessionLocal()
     try:
-        shoe_ids = [s.id for s in db.query(Shoe).filter(Shoe.is_active == True).all()]
-        query = db.query(Retailer).filter(
-            Retailer.is_active == True, Retailer.scraping_enabled == True
-        )
-        if retailer_ids:
-            query = query.filter(Retailer.id.in_(retailer_ids))
-        retailers = [(r.id, r.name) for r in query.all()]
-
-        # Site-wide discount codes, same as the old synchronous flow — quick
-        # and sequential; not part of the SSE event schema, so no event for it.
+        db = SessionLocal()
         try:
-            ScrapeOrchestrator(db).detect_all_promo_codes()
-        except Exception as e:
-            logger.warning(f"Promo detection failed during background scrape: {e}")
-    finally:
-        db.close()
+            shoe_ids = [s.id for s in db.query(Shoe).filter(Shoe.is_active == True).all()]
+            query = db.query(Retailer).filter(
+                Retailer.is_active == True, Retailer.scraping_enabled == True
+            )
+            if retailer_ids:
+                query = query.filter(Retailer.id.in_(retailer_ids))
+            retailers = [(r.id, r.name) for r in query.all()]
 
-    scrape_state.start()
+            # Site-wide discount codes, same as the old synchronous flow — quick
+            # and sequential; not part of the SSE event schema, so no event for it.
+            try:
+                ScrapeOrchestrator(db).detect_all_promo_codes()
+            except Exception as e:
+                logger.warning(f"Promo detection failed during background scrape: {e}")
+        finally:
+            db.close()
 
-    try:
+        scrape_state.start()
+
         await scrape_state.publish(
             {"type": "started", "retailers": [name for _, name in retailers]}
         )
