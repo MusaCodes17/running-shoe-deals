@@ -4,10 +4,10 @@ Streaming chat service — supports Anthropic, OpenAI, and Google Gemini provide
 Tool discovery is fully automatic via MCP (Streamable HTTP transport).
 Adding a new @mcp.tool() in mcp_server.py is sufficient — no registry updates needed here.
 
-Provider routing:
-  claude-*  → AnthropicProvider
-  gpt-*     → OpenAIProvider
-  gemini-*  → GeminiProvider
+Provider routing is by explicit catalog lookup (MODELS below), not name
+prefix: every model id names its provider. Both /chat/providers and
+_get_provider read that one list, so the catalog lives in exactly one place
+(R1.5d).
 """
 import asyncio
 import json
@@ -58,6 +58,34 @@ MCP_SERVERS: list[dict] = [
         "url": os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp"),
     },
 ]
+
+# Single source of truth for the chat model catalog (R1.5d). Each entry names
+# its provider explicitly, so provider routing (_get_provider) and the
+# /chat/providers listing both read this one list instead of two files agreeing
+# by convention. `provider` is a key into PROVIDERS below.
+MODELS: list[dict] = [
+    {"id": "claude-sonnet-4-5",         "label": "Claude Sonnet", "description": "Best quality", "provider": "anthropic"},
+    {"id": "claude-haiku-4-5-20251001", "label": "Claude Haiku",  "description": "Fastest",      "provider": "anthropic"},
+    {"id": "gpt-4o",                    "label": "GPT-4o",        "description": "Best quality", "provider": "openai"},
+    {"id": "gpt-4o-mini",               "label": "GPT-4o Mini",   "description": "Fastest",      "provider": "openai"},
+    {"id": "gemini-2.0-flash",          "label": "Gemini Flash",  "description": "Fastest",      "provider": "google"},
+    {"id": "gemini-2.0-pro",            "label": "Gemini Pro",    "description": "Best quality", "provider": "google"},
+]
+
+# Provider-level metadata: display name and the env var whose presence enables
+# the provider. Keyed by MODELS[].provider. The provider *implementation* is
+# mapped separately in _PROVIDER_CLASSES (below the class definitions).
+PROVIDERS: dict[str, dict] = {
+    "anthropic": {"name": "Claude",  "api_key_env": "ANTHROPIC_API_KEY"},
+    "openai":    {"name": "ChatGPT", "api_key_env": "OPENAI_API_KEY"},
+    "google":    {"name": "Gemini",  "api_key_env": "GOOGLE_API_KEY"},
+}
+
+
+def get_models() -> list[dict]:
+    """The chat model catalog (id, label, description, provider) — the single
+    source consumed by the /chat/providers endpoint and _get_provider."""
+    return MODELS
 
 # Defensive cap on the agentic loop in each provider's run() below. Without
 # this, a model that keeps emitting tool calls indefinitely (a confusing
@@ -388,12 +416,23 @@ class GeminiProvider(BaseLLMProvider):
             })
 
 
+# provider key (from MODELS/PROVIDERS) → implementation. Defined here, after
+# the provider classes, so it can reference them.
+_PROVIDER_CLASSES: dict[str, type[BaseLLMProvider]] = {
+    "anthropic": AnthropicProvider,
+    "openai": OpenAIProvider,
+    "google": GeminiProvider,
+}
+
+_MODEL_PROVIDER: dict[str, str] = {m["id"]: m["provider"] for m in MODELS}
+
+
 def _get_provider(model: str) -> BaseLLMProvider:
-    if model.startswith("gpt-"):
-        return OpenAIProvider()
-    if model.startswith("gemini-"):
-        return GeminiProvider()
-    return AnthropicProvider()
+    """Resolve a model id to its provider implementation via the MODELS catalog
+    (R1.5d) — no name-prefix guessing. Unknown ids fall back to Anthropic, the
+    default provider (DEFAULT_MODEL is a Claude model)."""
+    provider = _MODEL_PROVIDER.get(model, "anthropic")
+    return _PROVIDER_CLASSES[provider]()
 
 
 async def _load_context_resources(group) -> str:

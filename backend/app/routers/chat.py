@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.models import OwnedShoe
-from app.services.chat_service import read_mcp_resource, stream_chat
+from app.services.chat_service import PROVIDERS, get_models, read_mcp_resource, stream_chat
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -30,60 +30,27 @@ class ChatRequest(BaseModel):
 
 @router.get("/providers")
 def get_providers():
-    """Returns available AI providers and their model lists. available is driven by API key presence."""
-    return {
-        "providers": {
-            "anthropic": {
-                "name": "Claude",
-                "available": bool(os.getenv("ANTHROPIC_API_KEY")),
-                "models": [
-                    {
-                        "id": "claude-sonnet-4-5",
-                        "name": "Claude Sonnet",
-                        "description": "Best quality",
-                    },
-                    {
-                        "id": "claude-haiku-4-5-20251001",
-                        "name": "Claude Haiku",
-                        "description": "Fastest",
-                    },
-                ],
-            },
-            "openai": {
-                "name": "ChatGPT",
-                "available": bool(os.getenv("OPENAI_API_KEY")),
-                "models": [
-                    {
-                        "id": "gpt-4o",
-                        "name": "GPT-4o",
-                        "description": "Best quality",
-                    },
-                    {
-                        "id": "gpt-4o-mini",
-                        "name": "GPT-4o Mini",
-                        "description": "Fastest",
-                    },
-                ],
-            },
-            "google": {
-                "name": "Gemini",
-                "available": bool(os.getenv("GOOGLE_API_KEY")),
-                "models": [
-                    {
-                        "id": "gemini-2.0-flash",
-                        "name": "Gemini Flash",
-                        "description": "Fastest",
-                    },
-                    {
-                        "id": "gemini-2.0-pro",
-                        "name": "Gemini Pro",
-                        "description": "Best quality",
-                    },
-                ],
-            },
-        },
-        "default_model": DEFAULT_MODEL,
-    }
+    """Available AI providers and their models, grouped by provider.
+
+    `available` is driven by API-key presence. The model catalog is
+    single-sourced in chat_service.get_models() (R1.5d) — this endpoint only
+    groups it by provider and layers on key availability.
+    """
+    providers: dict = {}
+    for model in get_models():
+        pkey = model["provider"]
+        meta = PROVIDERS[pkey]
+        bucket = providers.setdefault(pkey, {
+            "name": meta["name"],
+            "available": bool(os.getenv(meta["api_key_env"])),
+            "models": [],
+        })
+        bucket["models"].append({
+            "id": model["id"],
+            "name": model["label"],
+            "description": model["description"],
+        })
+    return {"providers": providers, "default_model": DEFAULT_MODEL}
 
 
 @router.get("/resources")
