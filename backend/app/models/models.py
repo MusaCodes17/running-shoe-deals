@@ -414,3 +414,23 @@ class StravaGearMapping(Base):
 
     def __repr__(self):
         return f"<StravaGearMapping {self.gear_name!r} -> shoe {self.owned_shoe_id}>"
+
+
+class AthleteMetric(Base):
+    """
+    A periodic snapshot of COROS athlete-level fitness (R2.7 T5) — not per
+    activity, but per sync. Append-only: each row is one point in time, so the
+    Training-tab fitness card reads the newest and the history is preserved for
+    future trend views. Written via the Claude-Desktop sync agent (design
+    decisions C6 — server-side COROS is dormant), never computed by Anton.
+    """
+    __tablename__ = "athlete_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vo2max = Column(Float, nullable=True)                        # ml/kg/min
+    threshold_pace_s_per_km = Column(Integer, nullable=True)     # lactate threshold pace
+    race_predictions = Column(JSON, nullable=True)               # {"5.0": 1234, "10.0": 2468, ...} distance_km → predicted_s
+    captured_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    def __repr__(self):
+        return f"<AthleteMetric vo2max={self.vo2max} @ {self.captured_at}>"

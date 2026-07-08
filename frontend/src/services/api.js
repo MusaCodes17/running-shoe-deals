@@ -188,6 +188,7 @@ export const trainingApi = {
       },
     }).then((r) => r.data),
   records: () => client.get('/api/training/records').then((r) => r.data),
+  fitness: () => client.get('/api/training/fitness').then((r) => r.data),
 }
 
 // ============== ACTIVITIES (unified run feed) ==============

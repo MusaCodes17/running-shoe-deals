@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -977,6 +977,48 @@ def get_personal_bests() -> dict:
                 }
                 for b in result.records
             ],
+        }
+
+
+@mcp.tool()
+def record_athlete_metrics(
+    vo2max: Optional[float] = None,
+    threshold_pace_s_per_km: Optional[int] = None,
+    race_predictions: Optional[dict] = None,
+) -> dict:
+    """
+    Record a COROS athlete-level fitness snapshot (VO2 max, lactate-threshold
+    pace, race predictions) for the Training tab's fitness card. Append-only:
+    each call stores one dated snapshot; the card shows the most recent.
+
+    Anton cannot fetch these itself (server-side COROS is dormant). Get them from
+    the COROS MCP — `queryFitnessAssessmentOverview` (VO2 max, threshold pace,
+    race predictions) — then CONFIRM the values with the runner before calling
+    this (C9): "COROS reports VO2 max 62, threshold 3:45/km — record this?".
+
+    Args:
+        vo2max: VO2 max in ml/kg/min.
+        threshold_pace_s_per_km: lactate-threshold pace, seconds per km
+            (e.g. 3:45/km → 225).
+        race_predictions: dict of distance_km (as a string key) → predicted time
+            in seconds, e.g. {"5.0": 1005, "10.0": 2100, "21.0975": 4620,
+            "42.195": 9720}.
+    """
+    if vo2max is None and threshold_pace_s_per_km is None and not race_predictions:
+        return {"success": False, "error": "Provide at least one metric to record."}
+    with get_session() as db:
+        snap = fitness_svc.record_snapshot(
+            db,
+            vo2max=vo2max,
+            threshold_pace_s_per_km=threshold_pace_s_per_km,
+            race_predictions=race_predictions,
+        )
+        return {
+            "success": True,
+            "captured_at": snap.captured_at.isoformat() if snap.captured_at else None,
+            "vo2max": snap.vo2max,
+            "threshold_pace_s_per_km": snap.threshold_pace_s_per_km,
+            "race_predictions": snap.race_predictions,
         }
 
 

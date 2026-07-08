@@ -3,6 +3,7 @@ import { Activity, Trophy, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
+import FitnessCard from '@/components/training/FitnessCard'
 import PBCard from '@/components/training/PBCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   useTrainingSummary,
   useTrainingRecords,
+  useTrainingFitness,
   useActivities,
   useOwnedShoes,
 } from '@/hooks/useApi'
@@ -122,6 +124,7 @@ export default function Training() {
   const weekly = useTrainingSummary('weekly')            // unranged — this-week tile
   const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
   const records = useTrainingRecords()
+  const fitness = useTrainingFitness()
   const ownedShoes = useOwnedShoes()
 
   // Activities filters + "load more" (limit grows; offset stays 0 so the list
@@ -285,6 +288,13 @@ export default function Training() {
           </>
         )}
       </section>
+
+      {/* ── Fitness (COROS snapshot, T5) — only when recorded ──── */}
+      {fitness.data?.has_data && (
+        <section id="fitness" className="scroll-mt-20">
+          <FitnessCard data={fitness.data} />
+        </section>
+      )}
 
       {/* ── Races (after volume) ───────────────────────────────── */}
       <div id="races" className="scroll-mt-20">

@@ -36,6 +36,7 @@ export const queryKeys = {
   corosSyncStatus: () => ['coros', 'sync-status'],
   trainingSummary: (period, range) => ['training', 'summary', period, range ?? {}],
   trainingRecords: () => ['training', 'records'],
+  trainingFitness: () => ['training', 'fitness'],
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
   activities: (params) => ['activities', params ?? {}],
@@ -219,6 +220,13 @@ export function useTrainingRecords() {
   return useQuery({
     queryKey: queryKeys.trainingRecords(),
     queryFn: () => trainingApi.records(),
+  })
+}
+
+export function useTrainingFitness() {
+  return useQuery({
+    queryKey: queryKeys.trainingFitness(),
+    queryFn: () => trainingApi.fitness(),
   })
 }
 

@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import strava_stats
+from app.services import strava_stats, fitness as fitness_svc
+from app.utils.pace import seconds_to_pace
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -76,6 +77,35 @@ def get_training_summary(
     """Aggregated run volume by month or week (union of Strava + shoe_runs),
     newest period first. Optional inclusive date_from..date_to range (R2.7 T4b)."""
     return strava_stats.training_summary(db, period=period, date_from=date_from, date_to=date_to)
+
+
+class FitnessResponse(BaseModel):
+    """The most recent COROS fitness snapshot (R2.7 T5), or an empty envelope
+    when none has been recorded. threshold_pace is formatted at the boundary."""
+    has_data: bool = False
+    captured_at: Optional[str] = None
+    vo2max: Optional[float] = None
+    threshold_pace_s_per_km: Optional[int] = None
+    threshold_pace: Optional[str] = None            # "M:SS/km" presentation
+    race_predictions: Optional[dict] = None          # {"5.0": 1234, ...}
+
+
+@router.get("/fitness", response_model=FitnessResponse)
+def get_fitness(db: Session = Depends(get_db)):
+    """The latest athlete fitness snapshot (VO2 max, threshold pace, race
+    predictions). Empty envelope (has_data=False) when nothing recorded yet —
+    absence is not an error (graceful degradation)."""
+    snap = fitness_svc.latest(db)
+    if snap is None:
+        return FitnessResponse(has_data=False)
+    return FitnessResponse(
+        has_data=True,
+        captured_at=snap.captured_at.isoformat() if snap.captured_at else None,
+        vo2max=snap.vo2max,
+        threshold_pace_s_per_km=snap.threshold_pace_s_per_km,
+        threshold_pace=seconds_to_pace(snap.threshold_pace_s_per_km) if snap.threshold_pace_s_per_km else None,
+        race_predictions=snap.race_predictions,
+    )
 
 
 @router.get("/records", response_model=PersonalBestsResponse)
