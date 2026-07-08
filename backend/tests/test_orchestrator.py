@@ -11,8 +11,6 @@ The last test documents the known B10/H2 gap (refactor.md H2): a partial
 detail-fetch failure currently orphan-retires a live deal. It is marked xfail
 so it flips to a pass the day H2 is fixed, without locking in the bug.
 """
-import pytest
-
 from app.models.models import Deal, Retailer, Shoe
 from app.scrapers.orchestrator import ScrapeOrchestrator
 
@@ -108,13 +106,10 @@ def test_deal_orphaned_when_its_url_disappears_from_search(db):
     assert db.query(Deal).filter(Deal.product_url == "u1", Deal.is_active == False).count() == 1
 
 
-@pytest.mark.xfail(
-    reason="refactor.md H2 / B10 gap: a partial detail-fetch failure orphan-retires "
-    "a live deal because seen_urls only tracks successful fetches. Flip to pass "
-    "when H2 is fixed (orphan-retire against search-returned URLs, not just fetched).",
-    strict=False,
-)
-def test_partial_detail_failure_should_not_orphan_a_live_deal(db):
+def test_partial_detail_failure_does_not_orphan_a_live_deal(db):
+    """H2/B10 fix: a product still returned by search must keep its live deal
+    even when its detail fetch fails this scrape — orphan retirement runs
+    against the union of searched + fetched URLs, not fetched-only."""
     retailer, shoe = _setup(db, msrp=200.0)
     # Two live deals.
     _run(
@@ -124,11 +119,12 @@ def test_partial_detail_failure_should_not_orphan_a_live_deal(db):
     )
     assert db.query(Deal).filter(Deal.is_active == True).count() == 2
 
-    # Next scrape: u1's detail fetch times out (None); u2 succeeds. u1 was still
-    # returned by search, so its deal should survive — but currently doesn't.
+    # Next scrape: u1's detail fetch times out (None); u2 succeeds. u1 is still
+    # returned by search, so its deal survives (u2 refreshes in place).
     _run(
         db, retailer, shoe,
         [{"product_url": "u1"}, {"product_url": "u2"}],
         {"u1": None, "u2": _detail("u2", 170.0)},
     )
     assert db.query(Deal).filter(Deal.product_url == "u1", Deal.is_active == True).count() == 1
+    assert db.query(Deal).filter(Deal.is_active == True).count() == 2
