@@ -52,6 +52,7 @@ class PersonalBestResponse(BaseModel):
     source: str
     shoe: Optional[RecordShoe] = None
     strava_activity_id: Optional[int] = None
+    activity_id: Optional[int] = None      # canonical id → the activity detail/editor
 
     class Config:
         from_attributes = True

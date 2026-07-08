@@ -213,6 +213,17 @@ def test_pb_elapsed_guard_excludes_stop_heavy_untagged(db):
     assert "stop-heavy untagged run" in result.excluded_reason
 
 
+def test_pb_carries_canonical_activity_id(db):
+    # The record exposes the canonical activity_id so the Records card can deep-link
+    # to the /activities/:id editor (to retag/exclude a run).
+    a = _activity(db, said=14, run_date=date(2026, 6, 6), dist=10.0, pace_s=240)
+    db.commit()
+    result = strava_stats.personal_bests(db)
+    ten = _band(result, "10k")
+    assert ten is not None
+    assert ten.activity_id == a.id
+
+
 def test_pb_elapsed_guard_boundary_keeps_clean_run(db):
     # elapsed exactly 1.5 * moving is NOT > 1.5x → still eligible.
     a = _activity(db, said=14, run_date=date(2026, 6, 6), dist=5.0, pace_s=200, moving_s=1000)

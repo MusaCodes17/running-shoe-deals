@@ -54,6 +54,7 @@ class PersonalBest:
     source: str
     shoe: Optional[dict]              # {id, brand, model, nickname} or None
     strava_activity_id: Optional[int]
+    activity_id: Optional[int]        # canonical Activity id → the /activities/:id editor
 
 
 @dataclass
@@ -180,6 +181,7 @@ def personal_bests(db: Session) -> PersonalBestsResult:
                 else None
             ),
             strava_activity_id=best.strava_activity_id,
+            activity_id=best.activity_id,
         ))
 
     excluded_count = sum(excluded_reasons.values())

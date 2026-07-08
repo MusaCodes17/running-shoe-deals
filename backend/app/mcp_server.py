@@ -974,6 +974,7 @@ def get_personal_bests() -> dict:
                     "source": b.source,
                     "shoe": b.shoe,
                     "strava_activity_id": b.strava_activity_id,
+                    "activity_id": b.activity_id,
                 }
                 for b in result.records
             ],
