@@ -11,6 +11,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.models import OwnedShoe
+from app.models.schemas import (
+    ConversationResponse,
+    ConversationSummary,
+    ConversationUpsert,
+)
+from app.services import chat_history
 from app.services.chat_service import PROVIDERS, get_models, read_mcp_resource, stream_chat
 from app.services.rate_limit import chat_limiter
 
@@ -131,6 +137,49 @@ async def read_resource_endpoint(request: ResourceReadRequest):
             break
 
     return {"uri": request.uri, "content": content, "label": label}
+
+
+# ── Conversation persistence (R2.6) ─────────────────────────────────────────
+# Server-side chat memory. The streaming endpoint below stays stateless; the
+# client PUTs the full conversation here on stream-end.
+
+@router.get("/conversations", response_model=list[ConversationSummary])
+def list_conversations(db: Session = Depends(get_db)):
+    """All persisted conversations as summaries, newest-updated first."""
+    return chat_history.list_conversations(db)
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
+def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """One full conversation (both message arrays) for load-on-select."""
+    try:
+        return chat_history.get_conversation(db, conversation_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.put("/conversations/{conversation_id}", response_model=ConversationResponse)
+def upsert_conversation(
+    conversation_id: str,
+    payload: ConversationUpsert,
+    db: Session = Depends(get_db),
+):
+    """Create-or-replace a conversation by its client-generated id."""
+    return chat_history.upsert_conversation(
+        db,
+        conversation_id,
+        title=payload.title,
+        model=payload.model,
+        display_messages=payload.display_messages,
+        api_messages=payload.api_messages,
+    )
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """Delete a conversation. Idempotent — deleting a missing one is a no-op."""
+    deleted = chat_history.delete_conversation(db, conversation_id)
+    return {"success": True, "deleted": deleted}
 
 
 @router.post("/message")

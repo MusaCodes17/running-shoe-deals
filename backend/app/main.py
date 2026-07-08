@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from app.database import run_migrations
 from app.mcp_server import mcp
 from app.middleware.auth import BearerAuthMiddleware
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints
 
 # Load environment variables
 load_dotenv()
@@ -95,6 +95,7 @@ app.include_router(activities.router, prefix="/api")
 app.include_router(races.router, prefix="/api")
 app.include_router(home.router, prefix="/api")
 app.include_router(shoe_types.router, prefix="/api")
+app.include_router(checkpoints.router, prefix="/api")
 
 # Mount the MCP server (Streamable HTTP transport) at /mcp
 app.mount("/mcp", mcp.streamable_http_app())
