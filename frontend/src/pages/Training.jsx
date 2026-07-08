@@ -160,13 +160,26 @@ export default function Training() {
     return { thisWeek, thisMonth, total12, runs12 }
   }, [monthly.data, weekly.data])
 
-  // Chart data (chronological, last 12 periods of the selected range)
+  // Chart data (chronological). Shows every period inside the selected range —
+  // no fixed 12-bar cap, so widening the range visibly extends the weekly chart
+  // too (a 1-year range → ~52 weeks), not just the monthly one. Month axis
+  // labels (T4a) keep it legible at density.
   const chartData = useMemo(() => {
     const src = ranged.data
     if (!src) return []
     const label = period === 'weekly' ? labelWeek : labelMonth
-    return [...src].slice(0, 12).reverse().map((b) => ({ ...b, ...label(b.period) }))
+    return [...src].reverse().map((b) => ({ ...b, ...label(b.period) }))
   }, [period, ranged.data])
+
+  // Totals across the selected range (each run lands in exactly one bucket, so
+  // the sum is range-total regardless of weekly/monthly bucketing).
+  const rangeTotals = useMemo(() => {
+    const src = ranged.data || []
+    return {
+      km: src.reduce((s, b) => s + (b.total_km || 0), 0),
+      runs: src.reduce((s, b) => s + (b.run_count || 0), 0),
+    }
+  }, [ranged.data])
 
   // Weekly view (T4a): label the x-axis by month instead of week number. One
   // tick at the first week of each month; the formatter maps that week's label
@@ -249,9 +262,13 @@ export default function Training() {
 
             <div className="overflow-hidden rounded-2xl border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                <div className="flex items-center gap-2.5">
-                  <Activity className="h-4 w-4 text-primary" />
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Activity className="h-4 w-4 shrink-0 text-primary" />
                   <span className="font-heading text-md-plus font-bold text-foreground">Volume</span>
+                  {/* Range totals — what the selected date range adds up to. */}
+                  <span className="truncate text-xs text-faint tabular-nums">
+                    · {rangeTotals.km.toFixed(1)} km · {rangeTotals.runs} run{rangeTotals.runs === 1 ? '' : 's'}
+                  </span>
                 </div>
                 <div className="flex rounded-lg border border-border p-0.5">
                   {['weekly', 'monthly'].map((p) => (
