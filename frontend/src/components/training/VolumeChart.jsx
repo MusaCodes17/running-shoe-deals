@@ -30,7 +30,7 @@ function VolumeTooltip({ active, payload }) {
  * { label, fullLabel, total_km, run_count }. Kept legible at ~340px:
  * ≤12 points, abbreviated x labels, right-hand y-axis, no fixed pixel widths.
  */
-export default function VolumeChart({ data, height = 220 }) {
+export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter }) {
   const lastIndex = data.length - 1
 
   // Open circles for history, a solid haloed dot for the most recent period —
@@ -69,7 +69,8 @@ export default function VolumeChart({ data, height = 220 }) {
           tick={{ fontSize: 11, fill: '#6A6F76' }}
           stroke="#1E2126"
           fontFamily="JetBrains Mono, monospace"
-          interval="preserveStartEnd"
+          {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
+          {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
           tickMargin={8}
         />
         <YAxis

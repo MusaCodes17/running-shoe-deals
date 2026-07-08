@@ -34,10 +34,27 @@ function labelMonth(period) {
   const mon = MONTHS[parseInt(m, 10) - 1] ?? period
   return { label: mon, fullLabel: `${mon} ${y}` }
 }
-// "2026-W27" → { label: "W27", fullLabel: "Week 27 · 2026" }
+// The Thursday of an ISO week (ISO 8601: the week's Thursday fixes its month/year).
+function isoWeekThursday(y, w) {
+  const jan4 = new Date(Date.UTC(y, 0, 4))
+  const jan4Dow = jan4.getUTCDay() || 7 // Mon=1..Sun=7
+  const week1Mon = new Date(jan4)
+  week1Mon.setUTCDate(jan4.getUTCDate() - (jan4Dow - 1))
+  const thu = new Date(week1Mon)
+  thu.setUTCDate(week1Mon.getUTCDate() + (w - 1) * 7 + 3)
+  return thu
+}
+// "2026-W27" → { label: "W27", fullLabel: "Week 27 · 2026", monthAbbrev: "Jul" }
+// monthAbbrev drives the month-based x-axis on the weekly view (T4a) — the data
+// stays weekly, only the axis labels are months.
 function labelWeek(period) {
   const [y, w] = period.split('-W')
-  return { label: `W${w}`, fullLabel: `Week ${parseInt(w, 10)} · ${y}` }
+  const thu = isoWeekThursday(parseInt(y, 10), parseInt(w, 10))
+  return {
+    label: `W${w}`,
+    fullLabel: `Week ${parseInt(w, 10)} · ${y}`,
+    monthAbbrev: MONTHS[thu.getUTCMonth()],
+  }
 }
 
 function currentMonthKey(d = new Date()) {
@@ -126,6 +143,21 @@ export default function Training() {
     return [...src].slice(0, 12).reverse().map((b) => ({ ...b, ...label(b.period) }))
   }, [period, monthly.data, weekly.data])
 
+  // Weekly view (T4a): label the x-axis by month instead of week number. One
+  // tick at the first week of each month; the formatter maps that week's label
+  // to its month name. Monthly view already labels by month, so no override.
+  const xAxis = useMemo(() => {
+    if (period !== 'weekly') return {}
+    const map = {}
+    const ticks = []
+    let prev = null
+    for (const d of chartData) {
+      map[d.label] = d.monthAbbrev
+      if (d.monthAbbrev !== prev) { ticks.push(d.label); prev = d.monthAbbrev }
+    }
+    return { xTicks: ticks, xTickFormatter: (lab) => map[lab] ?? lab }
+  }, [period, chartData])
+
   // Year options from the monthly periods (span all history)
   const years = useMemo(() => {
     const set = new Set((monthly.data || []).map((b) => b.period.split('-')[0]))
@@ -188,7 +220,7 @@ export default function Training() {
               </div>
               <div className="p-4">
                 {chartData.length ? (
-                  <VolumeChart data={chartData} />
+                  <VolumeChart data={chartData} {...xAxis} />
                 ) : (
                   <EmptyState
                     icon={Activity}
