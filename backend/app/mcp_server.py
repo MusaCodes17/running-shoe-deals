@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -266,6 +266,30 @@ def delete_shoe(shoe_id: int) -> dict:
             return {"success": True, "deleted": name}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def scrape_health() -> dict:
+    """
+    Report each retailer's scrape health so you can answer "is any retailer
+    quietly broken?" without triggering a scrape.
+
+    For every active retailer this returns a `health` verdict plus the latest
+    run's outcome:
+      - "ok"      — last scrape finished cleanly and found products.
+      - "warning" — last scrape finished cleanly but found ZERO products; the
+                    retailer's site likely changed and its scraper needs a look
+                    (this is the failure no error would ever show).
+      - "error"   — last scrape hit an exception (see the run's `error`).
+      - "unknown" — never scraped, or a scrape is currently running.
+
+    Also returns `recent_runs`, a newest-first log across all retailers. This
+    reads the durable scrape_runs history, so it reflects trends across past
+    scrapes, not just the current job. Use it before trigger_scrape to decide
+    whether a retailer is worth investigating.
+    """
+    with get_session() as db:
+        return scrape_history_svc.scrape_health(db)
 
 
 @mcp.tool()

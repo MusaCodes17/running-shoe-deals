@@ -70,6 +70,7 @@ class Retailer(Base):
     price_records = relationship("PriceRecord", back_populates="retailer", cascade="all, delete-orphan")
     deals = relationship("Deal", back_populates="retailer", cascade="all, delete-orphan")
     promo_codes = relationship("PromoCode", back_populates="retailer", cascade="all, delete-orphan")
+    scrape_runs = relationship("ScrapeRun", back_populates="retailer", cascade="all, delete-orphan")
 
     @property
     def active_promo_codes(self):
@@ -171,6 +172,50 @@ class PromoCode(Base):
 
     def __repr__(self):
         return f"<PromoCode {self.code} @ {self.retailer_id}>"
+
+
+class ScrapeRun(Base):
+    """
+    Observability record for a single retailer's scrape attempt (R2.5).
+
+    Grain is **one row per retailer per full-catalog scrape attempt** — the
+    unit that answers "is Altitude quietly broken?": a run that finishes
+    `success` with `products_found == 0` is the tell-tale, distinct from one
+    that finishes `error`. Written only by the orchestrator's
+    `scrape_retailer()` (the single sanctioned write path); read by
+    `services/scrape_history.py`.
+
+    This is deals-domain telemetry — **disposable**, cascade-deleted with its
+    retailer (CLAUDE.md §2.6: history is sacred in training, disposable in
+    deals). It is *not* the SSE `scrape_state`, which is in-memory and dies on
+    restart; this table is the durable trend R4.1/R4.5 will build on.
+    """
+    __tablename__ = "scrape_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    retailer_id = Column(Integer, ForeignKey("retailers.id"), nullable=False, index=True)
+    # A run is stamped "running" on creation and committed immediately so an
+    # in-flight (or crashed-mid-scrape) attempt is visible, then finalized to
+    # "success" | "error" when the retailer's shoe list is exhausted.
+    status = Column(String(20), nullable=False, default="running", server_default="running")
+    # How the scrape was triggered — "background" (POST /scrape/all),
+    # "manual" (POST /scrape/retailer/{id}); "scheduled" arrives with R4.1.
+    trigger = Column(String(20), nullable=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    shoes_scraped = Column(Integer, nullable=False, default=0)
+    products_found = Column(Integer, nullable=False, default=0)
+    prices_recorded = Column(Integer, nullable=False, default=0)
+    deals_found = Column(Integer, nullable=False, default=0)
+    # Joined per-item error strings (truncated) when status == "error"; NULL on
+    # a clean run. Not a stack trace — a human-readable "what went wrong".
+    error = Column(Text, nullable=True)
+
+    # Relationships
+    retailer = relationship("Retailer", back_populates="scrape_runs")
+
+    def __repr__(self):
+        return f"<ScrapeRun {self.retailer_id} {self.status} products={self.products_found}>"
 
 
 class OwnedShoe(Base):
