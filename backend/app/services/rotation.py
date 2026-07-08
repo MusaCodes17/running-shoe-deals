@@ -215,6 +215,15 @@ def log_run(
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
+    name: Optional[str] = None,
+    elevation_gain_m: Optional[float] = None,
+    moving_time_s: Optional[int] = None,
+    elapsed_time_s: Optional[int] = None,
+    avg_cadence: Optional[float] = None,
+    calories: Optional[float] = None,
+    training_load: Optional[float] = None,
+    training_focus: Optional[str] = None,
+    activity_tag: Optional[str] = None,
     increment_mileage: bool = True,
     commit: bool = True,
 ) -> RunLogResult:
@@ -230,6 +239,10 @@ def log_run(
     or transaction semantics that manual logging needs.
 
     Args:
+        name..training_focus/activity_tag: optional richer activity fields
+            (R2.7 T2) the COROS sync path now captures — all nullable, written
+            straight onto the canonical Activity. Manual/Strava callers that
+            don't have them simply omit them.
         increment_mileage: add ``distance_km`` to the shoe's current_mileage.
             Set False when the caller manages mileage itself (Strava backfill).
         commit: commit the transaction. Set False to flush only (assigning
@@ -250,10 +263,19 @@ def log_run(
     activity = Activity(
         source=source,
         activity_type="Run",
+        name=name,
         run_date=run_date,
         distance_km=distance_km,
         avg_pace_s_per_km=int(pace_s) if pace_s is not None else None,
         avg_hr=avg_hr,
+        elevation_gain_m=elevation_gain_m,
+        moving_time_s=moving_time_s,
+        elapsed_time_s=elapsed_time_s,
+        avg_cadence=avg_cadence,
+        calories=calories,
+        training_load=training_load,
+        training_focus=training_focus,
+        activity_tag=activity_tag,
         coros_activity_id=coros_activity_id,
         strava_activity_id=strava_activity_id,
         description=notes,
