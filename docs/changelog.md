@@ -1,7 +1,17 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-07-07
+**Last Updated:** 2026-07-08
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## ⚡ R2.3 — Indexed reads + watchlist service extraction — Phase 2 Session I — 2026-07-08
+
+**[CHANGED/ADDED] The first non-R2.7 R2 item. Two independent seam-preserving refactors: the `unified_activities` read path moves from a whole-table Python pass to a single indexed SQL query, and the watchlist reduction is extracted out of its fat router into a service. Two `r2:` commits. Suite 127 → 128. One live migration (index-only) — E4 reconciled.**
+
+- **[CHANGED] Part A — indexed SQL read path for `unified_activities`.** The seam used to load *every* activity + *every* `shoe_run` + *every* `owned_shoe` and filter/sort/paginate in Python. It now issues one query — `Activity` LEFT JOIN `shoe_runs` → `owned_shoes` — with all filters (year/month via `strftime`, date range, shoe, min-distance), the newest-first ORDER BY, and LIMIT/OFFSET pushed into the DB. The `UnifiedActivity` dataclass and the `unified_activities(...)` signature are byte-identical, so `home`, `strava_stats`, the `/api/activities` router, and every test are untouched callers (the seam guarantee — proven green by `test_activities_union.py`). The ORDER BY coalesces the two nullable id columns to 0 to reproduce the old `_sort_key` tiebreak exactly; `month=6` still matches June across all years. **New composite index `ix_activities_type_run_date` (activity_type, run_date)** — migration `b8c9d0e1f2a3`, additive/reversible — serves the base filter + order (verified query plan: `SEARCH activities USING INDEX ix_activities_type_run_date`, no temp b-tree sort). **E4:** live DB backed up (`~/anton-data/backups/shoe_deals.db.bak-r2.3-type-run-date-index`); index-only change moves no data (counts trivially unchanged); down/up round-trip clean; auto-applies on the dev server's next reload (R2.2 startup runs `alembic upgrade head` — already applied manually to the live DB this session). +1 test (`test_filter_composes_with_pagination_newest_first` — locks filter + ORDER BY + LIMIT/OFFSET composed in one SQL query).
+- **[ADDED] Part B — `services/watchlist.py` extracted from the fat router.** The whole watchlist reduction (active-deal grouping, best-ever + latest-per-retailer single pass, image fallback, on-sale-first ordering) moves out of `routers/watchlist.py` into `build_watchlist(db) -> list[WatchlistEntry]`, returning value-object dataclasses (`WatchlistEntry`/`WatchlistBestDeal`/`WatchlistLastSeen`). The router is now a thin adapter (CLAUDE.md §4.1): its Pydantic response models gained `from_attributes` and read the dataclasses field-for-field. **This unblocks MCP watchlist parity (R3.4)** — a future tool/resource calls the same `build_watchlist` instead of re-deriving it. Behaviour unchanged: the pre-existing `test_watchlist.py` (which calls `get_watchlist` directly) passes as-is because the dataclass field names match its assertions; nested Pydantic `from_attributes` serialization verified separately. The labelled O(N) whole-table pass is preserved deliberately (personal scale — CLAUDE.md §12).
+- **[VERIFIED] Suite 127 → 128** (+1 Part-A boundary test; Part B reuses the existing 4 watchlist tests unchanged). No `vite build` needed — no frontend change. No new design_decisions entry: R2.3 is planned execution, not a decision reversal. **[DOCS]** roadmap R2.3 row → project_state §3; project_state §11 advances the active R2 thread to rate-limiting / R2.4.
 
 ---
 

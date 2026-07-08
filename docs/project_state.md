@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-08 (after Phase 2 Session H — **R2.7 Session 3: race↔activity link + COROS-name tag inference (T7–T8)** — which **closes R2.7 end-to-end, all eight sub-items T1–T8**. T7 `planned_races.activity_id` FK (migration `a7b8c9d0e1f2`) set by the T6 promote flow, deep-linking past-race rows to `/activities/:id`; T8 pure `suggest_tag_from_name` + `sync_coros_runs` prompt extension (suggestion only, C9). Suite 106 → **126**. Prior: Session G shipped **R2.7 T4–T6**; Session F **T1–T3** (+B15/B16); Session E **R2.2**; Session D **R2.1**. **R2.7 done; next active R2 items are R2.3 indexed reads + rate limiting.**)
+**Snapshot date:** 2026-07-08 (after Phase 2 Session I — **R2.3 indexed reads + watchlist service extraction**. `unified_activities` swapped from a whole-table Python pass to one indexed SQL query behind the unchanged seam; new composite index `ix_activities_type_run_date` (migration `b8c9d0e1f2a3`); `services/watchlist.py` extracted from the fat router, unblocking MCP watchlist parity (R3.4). Suite 127 → **128**. Prior: Session H **R2.7 T7–T8 + Training-tab polish** (suite → 127); Session G **R2.7 T4–T6**; Session F **T1–T3**; Session E **R2.2**; Session D **R2.1**. **R2.7 + R2.3 done; next active R2 item is rate limiting on `/api/chat/message`, then R2.4 shoe-type vocabulary.**)
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -22,7 +22,7 @@ Anton (repo name: `running-shoe-deals`) is a **single-user personal running plat
 | Anton redesign Phases 1–4 (IA, Deals watchlist, Training tab, Home) | ✅ Complete (Phase 4 landed 2026-07-03) |
 | Phase 5 backlog | 🟡 3 of 4 items done (canonical activities ✅ 2026-07-04 · `/shoes` lifecycle reframe ✅ · app mark ✅ · **agents remaining**) |
 | Strava historical import (694-run, 8-year archive) | ✅ Complete and now *structurally* permanent (absorbed into `activities`) |
-| Test suite | ✅ **127 passing**, 19 modules (Session H: `test_races.py` +2, `test_activity_tags.py` +18, `test_activities_union.py` +1 (PB activity_id); Session G: `test_fitness.py` +2, `test_activity_edit.py` +6, `test_activities_union.py` +1; Session F: `test_activity_tags.py` +3, `test_activities_model.py`/`test_activities_union.py` +2/+4; `test_auth.py` +13 Session D) |
+| Test suite | ✅ **128 passing**, 19 modules (Session I: `test_activities_union.py` +1 composed filter+pagination; Session H: `test_races.py` +2, `test_activity_tags.py` +18, `test_activities_union.py` +1 (PB activity_id); Session G: `test_fitness.py` +2, `test_activity_edit.py` +6, `test_activities_union.py` +1; Session F: `test_activity_tags.py` +3, `test_activities_model.py`/`test_activities_union.py` +2/+4; `test_auth.py` +13 Session D) |
 | Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills) |
 | Roadmap R1 (loose ends) | ✅ **Complete** (2026-07-07) — R1.1/R1.2 docs, R1.3 replacement-deals card, R1.4 proxy guards, R1.5 debt sweep (Task D · shim delete · pure `pace` · chat catalog), R1.6 APScheduler removed |
 | Review safety fixes (C1 / M3) | ✅ **Resolved** (Session C, 2026-07-07) — mileage ledger no longer writable via PUT (sanctioned `adjust_mileage` path); scrape-lock wedge closed + admin force-release/status endpoints |
@@ -67,6 +67,9 @@ Grouped; dates are `docs/changelog.md` entries.
 - **Documentation program shipped and committed (R1.1, 2026-07-06):** full `docs/` suite, `refactoring/` reviews, `CLAUDE.md` (with the §14 INVARIANTS checkable list, INV-1…INV-8), the `claude.md → docs/changelog.md` rename, and the `.claude/skills/` library (13 workflow skills per `docs/skills_library.md`; the `shoe_type` vocabulary table landed in domain_model §4.3 the same session).
 - **Schema authority resolved (R2.2, Phase 2 Session E, 2026-07-07):** Alembic is the sole schema source — startup runs `alembic upgrade head` (`database.run_migrations()`) instead of `create_all` (now test-fixture-only); the baseline revision `cf1eccba0a79` recreates the exact pre-Alembic schema so a fresh DB builds from Alembic alone; `legacy_migrations/` deleted; the live DB + backups moved out of the repo tree to `~/anton-data/`. A6 → Superseded.
 - **R1 debt sweep (Phase 2 Session B, 2026-07-07):** `ShoeRun.activity` eager-loaded at all five run-list seams (R1.4); `rotation.attach_computed_fields` extracted, killing the last router→router import (R1.5a); `scraper_manager` shim deleted, consumers on `ScrapeOrchestrator`/`lock`/`registry` (R1.5b); pure `app/utils/pace.py` replacing three copies (R1.5c); `chat_service.MODELS` single-sourcing the model catalog + id-based provider routing (R1.5d); APScheduler removed from `requirements.txt` (R1.6). D7 and E5 → Superseded.
+
+**Engineering (cont.)**
+- **Indexed reads + watchlist service (R2.3, Session I, 2026-07-08):** `unified_activities` swapped from a whole-table Python pass to a single indexed SQL query (LEFT JOIN through `shoe_runs`→`owned_shoes`, all filters + newest-first order + LIMIT/OFFSET in the DB) behind the byte-identical seam — every caller untouched. New composite index `ix_activities_type_run_date` (migration `b8c9d0e1f2a3`, additive/reversible, E4-reconciled). `services/watchlist.py` extracted from the fat `routers/watchlist.py` (value-object dataclasses; router now a thin adapter), unblocking MCP watchlist parity (R3.4).
 
 **Rotation & training (cont.)**
 - **Replacement Deals card on `/shoes/:id`** — live section (shipped in PR #9): same-type active deals, worst-discount-first, with brand/model/retailer/price/savings-badge/link and **size availability** (added 2026-07-07, R1.3), plus loading/error/empty/no-type states.
@@ -117,7 +120,7 @@ Full ranked treatment: `refactoring/tech_debt.md` — **the ranked authority** (
 - **No auth on three mutation surfaces** + default `0.0.0.0` bind (deliberate; gates all exposure). **The top open item; its plan now exists** (`SECURITY_PASS_PLAN.md`, ready to execute as R2.1).
 - ~~**Dual schema authority** (`create_all` + Alembic) and DB + dated `.bak` files in the working tree.~~ resolved (R2.2, Session E, 2026-07-07 — Alembic sole authority, `create_all` test-only, DB + backups moved to `~/anton-data/`; A6 → Superseded).
 - **Fat legacy routers** (`watchlist`, `deals`, `dashboard`) with inline ORM logic — also what blocks MCP watchlist parity.
-- **Whole-table in-Python reads** (`unified_activities`, watchlist reduction) — fine at 933 activities; the canonical table now makes indexed queries possible.
+- ~~**Whole-table in-Python reads** (`unified_activities`, watchlist reduction)~~ — `unified_activities` is now a single indexed SQL query (R2.3, Session I; index `ix_activities_type_run_date`). The watchlist reduction still reduces in Python but now lives in `services/watchlist.py` (labelled O(N), fine at scale); `deals`/`dashboard` fat routers remain.
 - **Provider agentic loop implemented 3×** (per provider) — the model-catalog duplication half was fixed (R1.5d, 2026-07-07); the loop triplication remains (tech_debt 5.2, consolidate before the R3 agents extend it).
 - ~~**Writable mileage ledger** via `PUT /owned-shoes/{id}` (P0-1)~~ resolved (C1, Session C, 2026-07-07 — sanctioned `rotation.adjust_mileage()` path). ~~**Scrape-lock wedge**~~ resolved (M3, same session — lock-releasing `finally` covers setup; admin force-release endpoint).
 - ~~`scraper_manager` compat shim~~ deleted (R1.5b, 2026-07-07). ~~"Task D" router→router import~~ resolved (R1.5a). ~~Pace formatting ×3~~ resolved (R1.5c). ~~Chat catalog duplication~~ resolved (R1.5d). ~~APScheduler installed, unwired~~ removed (R1.6).
@@ -166,13 +169,13 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 ## 11. Areas Requiring Immediate Attention
 
-Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **R1 done; C1/M3 safety fixes done; R2.1 (security) + R2.2 (schema authority) shipped and now *live*; R2.7 (training depth) complete end-to-end (T1–T8).** The active R2 thread is now R2.3–R2.6.
+Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **R1 done; C1/M3 safety fixes done; R2.1 (security) + R2.2 (schema authority) shipped and now *live*; R2.7 (training depth) complete end-to-end (T1–T8); R2.3 (indexed reads + watchlist service) shipped.** The active R2 thread is now R2.4–R2.6 + rate limiting.
 
-1. **R2.3 indexed read paths** — swap `unified_activities` internals from whole-table Python to SQL date-range/shoe/pagination queries (the seam guarantees zero caller changes); extract `services/watchlist.py` from the fat router. Unlocks MCP watchlist parity (R3.4). *(R2.7 T4b already added `date_from/date_to` to `unified_activities` + `training_summary` — build on it.)*
-2. **Rate limiting on `/api/chat/message`** — the remaining R2.1-adjacent item (plan §6). R2.1 stopped *anonymous* spend; it does not stop an authenticated client from looping.
-3. **R2.4 shoe-type controlled vocabulary** — promote `shoe_type` from free strings to a backend-owned served list (the pattern R2.7 T1's `activity_tag` vocabulary already established), deleting `lib/shoeTypes.js` as an independent copy.
-4. **Deal-domain test gaps**: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
-5. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
+1. **Rate limiting on `/api/chat/message`** — the remaining R2.1-adjacent item (plan §6). R2.1 stopped *anonymous* spend; it does not stop an authenticated client from looping.
+2. **R2.4 shoe-type controlled vocabulary** — promote `shoe_type` from free strings to a backend-owned served list (the pattern R2.7 T1's `activity_tag` vocabulary already established), deleting `lib/shoeTypes.js` as an independent copy.
+3. **Deal-domain test gaps**: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
+4. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
+5. **R2.3 follow-on (optional):** the watchlist reduction still runs in Python inside `services/watchlist.py` (labelled O(N), fine at scale); the deal/price-record fat routers (`deals`, `dashboard`) remain to be thinned like watchlist was. Not urgent.
 
 ---
 
