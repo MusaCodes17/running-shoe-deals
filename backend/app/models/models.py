@@ -1,7 +1,7 @@
 """
 Database models using SQLAlchemy ORM
 """
-from sqlalchemy import BigInteger, Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
+from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -221,6 +221,11 @@ class Activity(Base):
     seconds-per-km (int); formatting to "M:SS/km" happens at the boundary.
     """
     __tablename__ = "activities"
+    # R2.3: composite index serving the unified_activities read path — every
+    # feed query filters activity_type == "Run" and orders/ranges on run_date.
+    __table_args__ = (
+        Index("ix_activities_type_run_date", "activity_type", "run_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     source = Column(String(20), nullable=False, index=True)  # strava | coros | manual
