@@ -1,6 +1,6 @@
 # Anton — Product Roadmap
 
-**Generated:** 2026-07-04. **Last updated:** 2026-07-07 (R2.1 marked done; R2.7 Training & Activity Depth added from user feature requests).
+**Generated:** 2026-07-04. **Last updated:** 2026-07-08 (R2.7.1 Training Depth follow-ups added from hands-on testing — closes T2 field population, reconciles the 12-month volume figures, wires T5 fitness end-to-end, and adds the Training-tab 2×2 card grid).
 **Inputs:** REDESIGN_PLAN Phase-5 backlog, standing wishlist items recorded in `docs/changelog.md`, the ⚠️ verdicts in `docs/design_decisions.md`, `docs/architecture.md` §16, and user feature requests 2026-07-07.
 **Framing:** Anton is evolving from a finished redesign into a long-term personal AI platform. This roadmap sequences that evolution.
 
@@ -52,7 +52,7 @@
 
 **Internal dependency order: T1 → T2 → T3 (schema foundation), then T4/T5/T6 in parallel, then T7, then T8.**
 
-**Progress:** ✅ **Complete — all eight sub-items T1–T8 (Sessions 1–3, F/G/H).** Session 1 (2026-07-07, F): T1 tag vocabulary + 4 `activities` columns (migration `e5f6a7b8c9d0`), T2 COROS field population, T3 PB eligibility fix. Session 2 (2026-07-08, G): T4a month volume axis, T4b date-range picker (backend `date_from`/`date_to` + UI), T5 `athlete_metrics` table + fitness card (migration `f6a7b8c9d0e1`), T6 `/activities/:id` edit + shoe reassignment (INV-1 ledger) + race promotion. Session 3 (2026-07-08, H): T7 `planned_races.activity_id` FK (migration `a7b8c9d0e1f2`, set by the T6 promote flow, deep-links past-race rows) · T8 `suggest_tag_from_name` + `sync_coros_runs` prompt extension (suggestion only, C9). See changelog and project_state §3.
+**Progress:** ✅ **Complete — all eight sub-items T1–T8 (Sessions 1–3, F/G/H).** Session 1 (2026-07-07, F): T1 tag vocabulary + 4 `activities` columns (migration `e5f6a7b8c9d0`), T2 COROS field population, T3 PB eligibility fix. Session 2 (2026-07-08, G): T4a month volume axis, T4b date-range picker (backend `date_from`/`date_to` + UI), T5 `athlete_metrics` table + fitness card (migration `f6a7b8c9d0e1`), T6 `/activities/:id` edit + shoe reassignment (INV-1 ledger) + race promotion. Session 3 (2026-07-08, H): T7 `planned_races.activity_id` FK (migration `a7b8c9d0e1f2`, set by the T6 promote flow, deep-links past-race rows) · T8 `suggest_tag_from_name` + `sync_coros_runs` prompt extension (suggestion only, C9). See changelog and project_state §3. **Follow-ups from testing: see §R2.7.1 below (F1–F4) — T2 field population, volume reconciliation, T5 fitness wiring, and the Training-tab 2×2 grid.**
 
 ### T1 — Extend the Activity model
 
@@ -169,6 +169,41 @@ A new card on the Training tab (alongside Records and Races) shows the most rece
 The suggested tag appears in the COROS sync confirmation table. The runner confirms or overrides — heuristics are never auto-applied silently (C9). Implementation is a pure extension of the `sync_coros_runs` MCP prompt text plus a small helper function; no new backend endpoints.
 
 **Dependency:** T2 (name field populated at sync time); T1 (tag field exists to receive the value).
+
+---
+
+## §R2.7.1 — Training Depth follow-ups (bug-fix pass, pre-R3) ✅ Done — Session Q, 2026-07-08
+
+*Four gaps surfaced by hands-on testing after R2.7 was marked complete (2026-07-08). Small, self-contained; finishes the training milestone honestly before R3. Decisions locked with the runner: rolling-365-day volume window · 2×2 = Races/Records/Fitness/Predictions · dedicated `sync_fitness` prompt + new `running_level` field. Migration `f2a3b4c5d6e7`. Suite 185 → 188.*
+
+**All four items shipped: F1 → F2 → F3 → F4.**
+
+### F1 — Finish COROS + manual run field population (closes T2 for real)
+
+The COROS *write* path (`confirm_coros_run` → `coros.confirm_run` → `rotation.log_run`) already persists all rich fields, but in practice elevation/times/cadence/calories/load/focus land NULL because the `sync_coros_runs` prompt fetches only `querySportRecords` (which doesn't return them) and never calls `getActivityDetail`. `log_run_to_shoe` lacks the rich params entirely.
+
+- Update the `sync_coros_runs` MCP prompt to call the COROS `getActivityDetail(labelId, sportType)` per confirmed run and pass elevation/moving/elapsed/cadence/calories into `confirm_coros_run` (C9-gated, no silent behavior).
+- Add the same optional rich params (+ `activity_tag`, validated) to `log_run_to_shoe` and forward to `rotation.log_run` (already supports them).
+- Out of scope: the narrow REST manual path (`ShoeRunCreate`/`CorosAssignment`) — flagged as a known parity gap.
+- Test: `rotation.log_run` persists the rich fields at the service chokepoint.
+
+### F2 — Reconcile the 12-month volume figures
+
+The "Last 12 mo" stat tile (12 calendar-month buckets, `Math.round`) and the Volume header total (rolling-365-day range, `.toFixed(1)`) disagree by window boundary + rounding. Fix (frontend `Training.jsx` only): compute the tile from a fixed **trailing-365-day** query and unify rounding, so it equals the header total when the `1y` preset is selected. No backend change (`/api/training/summary` already takes `date_from`/`date_to`).
+
+### F3 — Fitness metrics: populate T5 end-to-end + running level
+
+The `athlete_metrics` table, `record_athlete_metrics` tool, `GET /fitness` endpoint, and `FitnessCard` all exist, but nothing orchestrates the COROS fetch, so no snapshot is ever recorded and the card stays hidden.
+
+- Add nullable `running_level` (Float) to `AthleteMetric` (reversible E4 migration off `a7b8c9d0e1f2`); thread it through `services/fitness`, `FitnessResponse`, and `record_athlete_metrics`.
+- New `sync_fitness` MCP prompt (sibling of `sync_coros_runs`): calls COROS `queryFitnessAssessmentOverview`, confirms with the runner (C9), then `record_athlete_metrics` (VO2max, threshold pace, race predictions, running level).
+- Test: `running_level` round-trips through service + endpoint; empty envelope still `has_data=False`.
+
+### F4 — Training tab 2×2 card grid
+
+Replace the full-width vertical stack of Fitness/Races/Records with a `grid grid-cols-1 gap-4 lg:grid-cols-2` of four cards: **Races · Records · Fitness · Predictions**. Extract race predictions out of `FitnessCard` into a new `PredictionsCard`; wrap the inline Records grid in a new `RecordsCard` using the standard outer-card shell. The stat strip + Volume chart stay full-width above; the Activities list stays full-width below. Cards stack to one column on mobile.
+
+**Dependency:** F4's PredictionsCard/Fitness split pairs with F3's card content, but the layout work is otherwise independent.
 
 ---
 

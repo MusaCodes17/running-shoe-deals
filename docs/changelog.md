@@ -5,6 +5,22 @@
 
 ---
 
+## 🔧 R2.7.1 — Training depth follow-ups — Phase 2 Session Q — 2026-07-08
+
+**[ADDED/CHANGED] Four self-contained fixes that close the training milestone honestly before R3: rich COROS field wiring (F1), rolling-365-day volume tile (F2), fitness end-to-end with `sync_fitness` prompt + `running_level` (F3), and Training tab 2×2 card grid (F4). Suite 185 → 188 (+3: +1 F1, +2 F3). One E4-light migration (`f2a3b4c5d6e7`). Four `r2:` commits.**
+
+- **[ADDED] F1 — Rich COROS fields now flow through the MCP write path.** `log_run_to_shoe` lacked the nine per-run fields (`name`, `elevation_gain_m`, `moving_time_s`, `elapsed_time_s`, `avg_cadence`, `calories`, `training_load`, `training_focus`, `activity_tag`) that `rotation.log_run` already accepted — they were supported at the service layer but unreachable via MCP. Added them all as Optional params with `activity_tag` vocabulary validation (matching the `confirm_coros_run` pattern). Root cause of the null landing: `sync_coros_runs` fetched only `querySportRecords` (basic fields only) and never called `getActivityDetail`. Updated prompt Step 6 to call `getActivityDetail(labelId, sportType)` per confirmed run before `confirm_coros_run`. New test: `test_log_run_persists_rich_fields` — all nine fields round-trip through `rotation.log_run`. Suite 185 → 186.
+
+- **[CHANGED] F2 — "Last 12 mo" tile reconciled with the Volume header.** The stat tile computed over 12 calendar-month buckets (`Math.round`) while the header totalled a rolling-365-day range (`.toFixed(1)`) — disagreeing by window boundary and rounding. Fixed in `Training.jsx`: a stable `useMemo` trailing-365-day range drives a dedicated `useTrainingSummary('monthly', trailing365Range)` query so both figures share the same window and precision. No backend change. Suite unchanged.
+
+- **[ADDED] F3 — Fitness metrics end-to-end: `running_level` + `sync_fitness` prompt.** The `athlete_metrics` table, `record_athlete_metrics` MCP tool, `GET /fitness` endpoint, and `FitnessCard` all existed since R2.7 T5, but nothing orchestrated the COROS fetch-confirm-record flow, so no snapshot was ever written and the card stayed hidden. Added: (a) nullable `running_level` Float column on `AthleteMetric` (migration `f2a3b4c5d6e7`, E4-light — pure additive schema, live DB backed up to `~/anton-data/shoe_deals.db.bak-running-level`, down/up round-trip verified); threaded through `services/fitness.record_snapshot`, `FitnessResponse`, and the `record_athlete_metrics` MCP tool return. (b) New `sync_fitness` MCP prompt (sibling of `sync_coros_runs`): calls COROS `queryFitnessAssessmentOverview`, presents VO2max / threshold / running-level / race predictions for runner confirmation (C9), then `record_athlete_metrics`. `FitnessCard` updated: removed race predictions (split into F4's `PredictionsCard`), added running-level tile, added actionable empty state pointing to `sync_fitness`. 2 new tests: `test_running_level_round_trips` + `test_running_level_absent_stays_none`. Suite 186 → 188. Alembic head: `f2a3b4c5d6e7`.
+
+- **[CHANGED] F4 — Training tab 2×2 card grid.** Replaced the vertical full-width stack (conditional Fitness card, full-width Races, inline Records section without a card shell) with `grid grid-cols-1 gap-4 lg:grid-cols-2` — four consistent card-shell components above the Activities list: **Races · Records · Fitness · Predictions**. New `PredictionsCard` (extracted from `FitnessCard`; `PREDICTION_DISTANCES` lookup with loose key matching; empty state tied to `sync_fitness`). New `RecordsCard` (wraps the PBCard grid in the standard `rounded-2xl border border-border bg-card` shell; handles loading/error/empty). Mobile at 380 px stacks to single column. Suite unchanged.
+
+- **[VERIFIED] Suite 188 passing** (`venv/bin/python -m pytest`). `vite build` clean (pre-existing chunk-size warning only). Desktop + ~380 px visual pass on the Training tab: 2×2 card grid renders at 1440 px, cards stack at 380 px, 0 console errors. **[DOCS]** this entry; project_state snapshot → Session Q, §2 suite count → 188, §11 (R2.7.1 done, R3.1 next); roadmap R2.7.1 closed.
+
+---
+
 ## 👁️ R2.6 live browser visual pass — Phase 2 Session P — 2026-07-08
 
 **[VERIFIED] The desktop + ~380 px live pass on R2.6 that Session M deferred (the dev backend on `:8000` was down then). Backend + frontend both up this session; no source change — verification only. project_state §11 item 0 → resolved.**
