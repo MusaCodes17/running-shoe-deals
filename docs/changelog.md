@@ -5,6 +5,43 @@
 
 ---
 
+## 🛡️ RA1.3 — Surface & abuse hardening — 2026-07-09
+
+**[ADDED/CHANGED] Auth-failure logging, per-IP rate limiting, structured access log, OAuth login rate limit, Caddyfile comment update. No schema changes. No UI changes. Suite 208 → 231 (+23 tests). Two `ra1:` commits.**
+
+- **[ADDED] `backend/app/middleware/access_log.py` — `AccessLogMiddleware`:** Pure-ASGI (non-buffering) middleware that emits one structured log line per request: `{METHOD} {path} [{client}] → {status} {duration_ms:.0f}ms`. Client name comes from `scope["anton_client"]` set by `BearerAuthMiddleware` on successful named-token auth (falls back to `"anon"` for public paths and OAuth flows). Credential redaction: query-string params with keys `code`, `state`, `access_token`, `token`, `refresh_token` are replaced with `***` before logging — no Authorization headers are ever included (we log no request headers at all). Registered as the outermost middleware in `main.py` so it captures the final status code (including 401s from auth) and total end-to-end latency.
+
+- **[CHANGED] `backend/app/middleware/auth.py`:**
+  - Every 401 now logged at WARNING: `"auth 401: {METHOD} {path} from {ip}"`.
+  - **Auth-failure rate limiter:** after the per-IP burst is exhausted (`AUTH_FAILURE_BURST`, default 10), the response becomes `429 Too Many Requests` with `Retry-After` instead of `401` — visible throttle on credential-stuffing bots. The goal is *slow and visible*, not a WAF. Default 10 failures/minute per IP (`AUTH_FAILURE_LIMIT_PER_MINUTE`).
+  - **`_client_ip(scope)`** extracted as a module-level helper: checks `X-Forwarded-For` first (set by Caddy's `header_up X-Forwarded-For {remote_host}`), falls back to the ASGI `scope["client"]` tuple for direct connections.
+  - **`scope["anton_client"]`** set to the matched token's name on successful named-bearer auth (e.g. `"desktop"`, `"spa"`, `"loopback"`), or `"oauth"` for OAuth 2.1 access tokens — consumed by `AccessLogMiddleware`.
+
+- **[ADDED] `backend/app/services/rate_limit.py` — two new limiters:**
+  - `auth_failure_limiter` — the per-IP bucket consumed by `BearerAuthMiddleware`. Env-tunable via `AUTH_FAILURE_LIMIT_PER_MINUTE` / `AUTH_FAILURE_BURST` (both default to 10). Reuses the existing `KeyedRateLimiter` primitive.
+  - `login_failure_limiter` — the per-IP bucket consumed by `POST /oauth/login`. Env-tunable via `LOGIN_FAILURE_LIMIT_PER_MINUTE` / `LOGIN_FAILURE_BURST` (both default to 5). Docstring updated to describe all three limiters and their adversary models.
+
+- **[CHANGED] `backend/app/routers/oauth.py` — login rate limiting:**
+  - `login_post` gains `request: Request` parameter; checks `_login_failure_limiter.take(ip)` before the password comparison — every POST (success or failure) consumes a token, preventing timing-oracle attacks (a real user needs ≤1–2 attempts; the 5-token default burst gives ample room before throttling). Returns `429 + Retry-After` when the bucket is exhausted.
+  - Failed password attempts are logged at WARNING with the client IP.
+  - Module-level `_login_failure_limiter` reference enables monkeypatching in tests.
+  - RA1.3 TODO comment removed from docstring (it's done).
+
+- **[CHANGED] `deploy/Caddyfile` — credential-redaction comment updated:** reflects that the capability-URL path no longer exists (removed in RA1.1b); URI field deletion is now described as conservative OAuth hygiene rather than capability-URL protection.
+
+- **[ADDED] `backend/app/main.py`:** `AccessLogMiddleware` imported and registered via `app.add_middleware(AccessLogMiddleware)` (added last = outermost). Middleware stack comment added explaining the three-layer order and why each sits where it does.
+
+- **[ADDED] Tests (+23):**
+  - **`test_auth.py` +5:** `test_401_is_logged_with_method_and_path` (caplog); `test_401_log_contains_source_ip`; `test_client_name_stored_in_scope_on_success`; `test_repeated_auth_failures_trigger_429` (direct middleware test with injected tight limiter, follows `test_rate_limit.py` pattern).
+  - **`test_access_log.py` (new, +15):** `_redact_query` unit tests for all five sensitive param names (code, state, access_token, token, refresh_token), mixed params, empty query string, empty value; middleware integration tests for: one log line per request, method/path/status included, client name from scope, "anon" default, credential param redaction, no Authorization header in log output, non-200 status captured, non-http scope skipped.
+  - **`test_oauth.py` +3:** `test_login_rate_limit_triggers_429` (monkeypatched tight limiter, 3 POSTs: 401·401·429); `test_login_every_attempt_counts_against_limiter` (success + 2 failures + rate-limited = 302·401·401·429); `test_token_path_is_public` (pre-existing; total count includes this).
+
+- **[NOTED — human step] Uptime monitoring:** an external pinger on `/health` (free tier, e.g. Better Uptime / UptimeRobot) so "Anton is down" is a notification, not discovered mid-sync. Execute during RA1.5 cutover — the endpoint is already public and always returns `{"status": "healthy"}`.
+
+**[VERIFIED] Suite 231 passing** (`backend/venv/bin/pytest tests/ -q`). No UI changes (`vite build` not required). No schema changes. **[GREP CHECK]** `Authorization` header never appears in any access-log-line path (the log middleware records only method, path, client, status, duration — no request headers). Credential-material redaction in the access log is tested by `test_access_log.py::test_access_log_does_not_log_authorization_header` and the `_redact_query` unit tests. The Caddyfile log filter (deletes `uri`/`Authorization`/`Cookie`) covers the proxy layer. **RA1.3 → ✅**
+
+---
+
 ## 🔐 RA1.1b — OAuth 2.1 connector auth (Path 1: build the server) — 2026-07-09
 
 **[ADDED/CHANGED] OAuth 2.1 authorization-server for the claude.ai connector; capability-URL deleted. Suite 194 → 210 (+18 OAuth tests, −4 capability-URL tests). Migration `0b1c2d3e4f5a` added. 5 source files new, 5 files updated. All changes in one RA1.1b batch commit.**
