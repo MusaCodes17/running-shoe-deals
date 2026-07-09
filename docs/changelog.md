@@ -1,7 +1,57 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-07-08
+**Last Updated:** 2026-07-09
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## 🔐 RA1.0 + RA1.1 — Hosting decision, auth v2 (per-client tokens + capability-URL) — 2026-07-09
+
+**[CHANGED/ADDED] RA1.0 research spikes (S1–S3) answered; hosting decision D0 made; RA1.1 auth v2 shipped. Also: R2.7.2 — activity-tagged past races auto-surface in the Races card + View-all dialogs. Suite 188 → 196 (+8 auth: named-token map, capability-URL; +2 races). One `ra1:` commit + one `r2:` commit.**
+
+- **[RESEARCH] RA1.0 — Three discovery spikes closed the unknowns gating RA1.1/RA1.2:**
+  - **S1 (connector auth mechanism):** claude.ai custom connector UI accepts only OAuth 2.0 — bearer-header tokens are not supported (GitHub issues #112 and #411 both closed "not planned"). Decision: use the **capability-URL** approach as an interim connector auth mechanism: mount MCP at `/mcp` and accept requests on `/mcp/<CONNECTOR_TOKEN>/...` with ASGI middleware path-rewriting. No OAuth complexity; acceptable under TLS + rate limiting + failure logging (RA1.3).
+  - **S2 (mobile prompt invocability):** Whether MCP prompts are invocable from claude.ai mobile is unconfirmed from docs. Decision: design for the C6 fallback (Claude Desktop agent path remains canonical for `sync_coros_runs`); treat mobile prompts as a bonus once RA1.2 proves the substrate. Recorded as a C6 reference, not a blocker.
+  - **S3 (`mcp[cli]` 1.28 server-side auth):** The existing pure-ASGI bearer middleware already handles resource-server token validation correctly; no `mcp[cli]` SDK changes are needed for the bearer paths or the capability-URL approach (the ASGI layer rewrites the path before FastMCP sees it). Full OAuth flows remain deferred.
+  - **D0 (hosting):** **Option A — cloud VM** (Hetzner CX22 / Fly.io Shared-CPU-1x, ~$5–8 CAD/mo). Laptop rejected (sleeps). Always-on home box is the documented escape hatch if DC-IP scrape degradation occurs at RA1.5 — no paid bypass will be engaged (D3 stands). Findings and rejected alternatives recorded in `REMOTE_ACCESS_PLAN.md` §4–§5.
+
+- **[CHANGED] RA1.1 — Auth v2: replace single `ANTON_SECRET` with named per-client tokens (`backend/app/middleware/auth.py` — complete rewrite):**
+  - `ANTON_TOKENS="name:token,..."` map (e.g. `desktop:...,loopback:...,spa:...`) replaces the single shared secret. Each client is independently revocable. `_parse_token_map()` splits on commas then `partition(":")` so tokens containing `:` are supported; `get_named_token(name)` reads the map on each call (not cached) for use by `chat_service`.
+  - Constant-time multi-token comparison without short-circuiting: `result |= secrets.compare_digest(presented, token)` over every entry — no timing oracle even across N tokens.
+  - **Capability-URL bypass:** if `path == /mcp/<CONNECTOR_TOKEN>` or starts with `/mcp/<CONNECTOR_TOKEN>/`, the middleware rewrites `scope["path"]` to `/mcp<rest>` and passes it through without a bearer check. Wrong token in the capability path → clean 401 (middleware blocks before rewriting).
+  - `main.py`: `require_auth_config()` replaces `require_anton_secret()` — passes if `ANTON_TOKENS` OR `ANTON_CONNECTOR_TOKEN` is set; fails fast if neither is.
+  - `chat_service.py` loopback: reads `get_named_token("loopback")` instead of `ANTON_SECRET`.
+  - **`backend/.env`:** `ANTON_SECRET` + `VITE_ANTON_SECRET` removed; `ANTON_TOKENS=desktop:...,loopback:...,spa:...` and `ANTON_CONNECTOR_TOKEN=...` added (old secret rotated unconditionally — it was baked into every prior SPA bundle).
+  - **`frontend/.env`:** `VITE_ANTON_SECRET` updated to the `spa` token value.
+  - **`CLAUDE_DESKTOP_SETUP.md`:** rewritten for the named `desktop` token; added remote URL section (RA1.2) and capability-URL info for the connector.
+  - **`.env.example` (backend + frontend):** updated to document the new variable shapes.
+
+- **[ADDED] RA1.1 tests — `backend/tests/test_auth.py` rewritten (+8 net new tests):**
+  - `test_first_named_token_accepted` + `test_second_named_token_accepted` — any token in the map passes.
+  - `test_unregistered_token_rejected` — a token not in the map gets 401 even if it looks plausible.
+  - `test_capability_url_reaches_mcp` + `test_capability_url_path_without_trailing_slash` — correct connector token in the URL clears auth.
+  - `test_wrong_capability_url_rejected` — wrong token in the URL → 401.
+  - `test_mcp_root_without_capability_token_still_needs_bearer` — `/mcp` directly still requires a bearer.
+  - **Key implementation note (lazy middleware):** Starlette builds the middleware stack on the first HTTP request, not at import time. `test_http_smoke.py` was updated to set the identical `ANTON_TOKENS` map before any test fires — so whichever module runs first, both token maps agree and `test_second_named_token_accepted` doesn't fail spuriously.
+
+- **[ADDED] R2.7.2 — Activity-tagged races auto-surface + Races card View-all dialogs (`r2:` commit):**
+  - `list_races()` now queries for past activities tagged `Race` or `Parkrun` that aren't already back-linked to a `PlannedRace` row and returns them as `SimpleNamespace` synthetic entries with `from_activity=True`. Negative IDs (`-(activity.id)`) ensure no collision with real rows. `PlannedRace` rows gain `from_activity=False` via `attach_derived`.
+  - `PlannedRaceResponse` schema: `from_activity: bool = False` added (no migration — response-shape only; the field is populated at service level, never stored).
+  - `PlannedRacesCard`: replaced the "Past races ▾" accordion toggle with inline `VISIBLE_LIMIT=2` previews + "View all · N" dialog buttons for both upcoming and past sections — consistent fixed-height card matching `RecordsCard`/`FitnessCard`. `from_activity=True` items are read-only (no Edit/Done/Delete buttons).
+  - Tests: +2 (`test_activity_tagged_race_appears_in_list`, `test_already_linked_activity_not_duplicated`).
+
+- **[VERIFIED] Suite 188 → 196 passing** (`venv/bin/python -m pytest`). No schema migration (RA1.1 is pure `.env`/middleware/config; R2.7.2 schema change is response-shape only). No `vite build` needed (no UI change in RA1.1; R2.7.2 UI change noted — browser pass not yet done this session). **E7 → superseded by E9** (design_decisions); **D0** recorded; **RA1.0 + RA1.1 → ✅** (roadmap). `REMOTE_ACCESS_PLAN.md` §4/§5 updated with spike findings.
+
+---
+
+## 🧭 Roadmap reprioritization — RA (Remote Access & Deployment) added ahead of R3/R4 — 2026-07-09
+
+**[PLANNING — no code] R3 and R4 are parked; a new milestone RA now follows R2, pulling R5.2 (remote access story) forward and executing it. Plan doc written: `REMOTE_ACCESS_PLAN.md` (repo root, sibling of `SECURITY_PASS_PLAN.md`). Goal: sync COROS runs from Claude mobile anywhere — backend (SQLite + `/mcp`) first (RA1); remote/mobile clients later (RA2 → R5.1).**
+
+- **[WHY] Priority call by the runner (2026-07-09):** remote reachability of the platform beats proactive agents right now. R3 agents built after RA1 also inherit the remote substrate (digests readable from a phone anywhere), and R4.1's scheduling is better designed once the process has an always-on home — parking loses little and the resume order (RA1 → R3 → R4) is recorded on the parked sections.
+- **[DECISIVE FACTS in the plan (§2):** Claude mobile/web custom connectors are called from *Anthropic's cloud*, so Anton's MCP must be publicly resolvable over HTTPS — a Tailscale-into-the-LAN overlay cannot deliver the mobile-sync goal (Funnel/Tunnel qualify as transport only); and the laptop sleeps, so serving must move to an always-on host. A1 (local-first) is amended, not abandoned: dev stays local, serving becomes hosted single-tenant.]
+- **[STRUCTURE] RA1 = RA1.0 hosting decision D0 + spikes S1–S3 (connector auth mechanism · mobile prompt invocability · `mcp[cli]` server-side auth vs the A7 pin triangle) → RA1.1 auth v2 (per-client revocable tokens; `ANTON_SECRET` rotated — it's baked into every SPA bundle) ∥ RA1.2 substrate (container + TLS with unbuffered streaming + one-worker pin, INV-9 candidate) → RA1.3 hardening + RA1.4 off-laptop backups (Litestream + restore drill) → RA1.5 cutover (E4-style count reconciliation; two exit criteria: mobile sync E2E on cellular, and the DC-IP scrape checkpoint measured via R2.5 `scrape_runs` with the home-box escape hatch) → RA1.6 docs. Standing rule added to the spine: **nothing internet-exposed before auth v2 + TLS land together.**
+- **[DOCS] `docs/roadmap.md`:** header updated; RA section inserted after §R2.7.1 (table indexes the plan doc); R3/R4 headers marked ⏸ parked with resume conditions; R5.2 marked pulled-forward/executed-by-RA1; dependency spine redrawn with the third rule. **`docs/project_state.md`:** §11 next-step pointer → RA1.0. No source files touched; suite unchanged at 188.
 
 ---
 

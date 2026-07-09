@@ -1,6 +1,6 @@
 # Anton — Product Roadmap
 
-**Generated:** 2026-07-04. **Last updated:** 2026-07-08 (R2.7.1 Training Depth follow-ups added from hands-on testing — closes T2 field population, reconciles the 12-month volume figures, wires T5 fitness end-to-end, and adds the Training-tab 2×2 card grid).
+**Generated:** 2026-07-04. **Last updated:** 2026-07-09 (**RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: `REMOTE_ACCESS_PLAN.md`. Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
 **Inputs:** REDESIGN_PLAN Phase-5 backlog, standing wishlist items recorded in `docs/changelog.md`, the ⚠️ verdicts in `docs/design_decisions.md`, `docs/architecture.md` §16, and user feature requests 2026-07-07.
 **Framing:** Anton is evolving from a finished redesign into a long-term personal AI platform. This roadmap sequences that evolution.
 
@@ -207,9 +207,30 @@ Replace the full-width vertical stack of Fitness/Races/Records with a `grid grid
 
 ---
 
-## R3 — AI Capabilities
+## RA — Remote Access & Deployment *(added 2026-07-09 — executes before R3/R4)*
 
-*The redesign built the surfaces; R3 populates them. Every agent obeys C9: prepare and propose, the runner disposes.*
+*Turn "reachable on my laptop at home" into "reachable from Claude mobile anywhere." RA pulls **R5.2** forward and executes it. Phase 1 (RA1) is backend-only — the DB + MCP on an always-on host so `sync_coros_runs` works from a phone on cellular; remote/mobile *clients* are RA2 and later R5.1. **`REMOTE_ACCESS_PLAN.md` is the executing contract** — threat-model shift, hosting decision D0, spikes S1–S3, sequencing, cutover runbook, and the invariants checklist all live there; this table is the index.*
+
+*Two facts shape RA1 (plan §2): Claude mobile connectors are called from **Anthropic's cloud**, so the MCP endpoint must be publicly resolvable over HTTPS — a Tailscale-into-the-LAN overlay does not satisfy the goal; and the laptop sleeps, so serving moves to an always-on host (cloud VM recommended, always-on home box the fallback — decision gate D0). A1 (local-first) is amended, not abandoned: local-first stays the dev posture; serving becomes hosted single-tenant.*
+
+| # | Item | Description | Why it matters | Dependencies | Complexity |
+|---|---|---|---|---|---|
+| RA1.0 | **Hosting decision (D0) + discovery spikes (S1–S3)** ✅ **Done (2026-07-09)** | S1: connector requires OAuth or capability-URL (bearer not supported — #112/#411 closed); S2: mobile prompt invocability unconfirmed, C6 fallback documented; S3: existing ASGI middleware sufficient, full OAuth deferred. D0: Option A cloud VM (Hetzner/Fly.io ~$5–8 CAD/mo; always-on home box = escape hatch for DC-IP scrape degradation). Findings in `REMOTE_ACCESS_PLAN.md` §4–§5; A1 amended in design_decisions.md. | Every subsequent item's design branches on these answers; doing them first is the difference between a plan and a rewrite. | none | Low (research) |
+| RA1.1 | **Auth v2 — per-client, connector-compatible tokens** ✅ **Done (2026-07-09)** | Named `ANTON_TOKENS="name:token,..."` map (desktop/loopback/spa); capability-URL bypass at `/mcp/<CONNECTOR_TOKEN>/...` (path-rewritten in ASGI middleware); constant-time multi-token OR comparison; `get_named_token("loopback")` for chat_service; `ANTON_SECRET` rotated. `test_auth.py` rewritten +8 tests; `test_http_smoke.py` updated for shared env setup. Suite 188 → 196. E7 → Superseded by E9. | E7's shared cleartext token was designed for a trusted LAN; the internet threat model (plan §3) requires TLS-only transport, revocation per client, and visible failures. The mobile connector literally cannot connect until this exists. | RA1.0 | Medium (High if OAuth path) |
+| RA1.2 | **Deployment substrate** | Containerize (Python 3.11 + Playwright, pins intact), local-disk volume for `~/anton-data`, TLS (platform/Caddy/tunnel) with **unbuffered streaming verified** (chat SSE, scrape SSE, `/mcp` Streamable HTTP), startup `alembic upgrade head` as the deploy-time migrate, and **one Uvicorn worker pinned** — D4's lock and E8's limiter are in-process (INV-9 candidate). | The always-on host is the whole point of phase 1; the one-worker pin keeps two load-bearing in-process invariants true by construction rather than by luck. | RA1.0 | Medium |
+| RA1.3 | **Surface & abuse hardening** | 401 logging with source IP, throttled auth failures (in-process or host firewall), structured access log, external uptime monitoring on `/health`; admin endpoints reviewed (stay token-gated; admin-scoped token noted, not built). | An internet-facing service gets scanned within minutes of DNS propagating; the goal is that hostile traffic is slow and visible, not invisible. | RA1.2 | Low–Medium |
+| RA1.4 | **Backups off-laptop** | Litestream continuous replication (preferred) or nightly snapshot to runner-controlled object storage; pre-migration named backups continue on the host (E2/E4 convention); periodic snapshot pulled to the laptop as the dev-DB seed; **restore drill actually performed** before cutover counts as done. | The recovery story today is file copies on a laptop that will no longer hold the live DB. A backup that has never been restored is a hope. | RA1.2 | Low–Medium |
+| RA1.5 | **Cutover & validation** | Execute the plan §7 runbook: E4-style count reconciliation across the DB move, re-point Claude Desktop, add the claude.ai connector. Two exit criteria: (1) **end-to-end mobile sync on cellular** — COROS fetch → suggest → confirm → run lands with rich fields and mileage updates; (2) **the DC-IP scrape checkpoint** — full scrape from the new host compared per-retailer against the home baseline via R2.5 `scrape_runs`; material degradation invokes the home-box escape hatch (no paid-bypass escalation, D3 stands). | The milestone's definition of done is the user story itself, plus proof the deals domain didn't quietly pay for it. | RA1.1–RA1.4 | Medium |
+| RA1.6 | **Docs reconciliation** | `architecture.md` §11 rewritten for the internet trust model; design_decisions: A1 amended (hosted serving, local dev), E7 → per-client tokens, D0 recorded with rejected alternatives; R5.2 closed as pulled-forward-and-executed; `CLAUDE.md` INV-9; `CLAUDE_DESKTOP_SETUP.md` remote URL. | A fresh session reading `docs/` must describe the deployed reality, not the laptop. | RA1.5 | Low |
+| RA2 | **Remote clients (deferred sketch)** | SPA served remotely behind real session auth (login + httpOnly cookie — the baked bundle secret dies), then a PWA pass (manifest + installable + the existing 380 px discipline) as the interim mobile UI, then R5.1 native. Plan §8. | The stepping stones from "backend reachable" to "the app in my pocket," sequenced so each step is useful on its own. | RA1; precedes/accompanies R5.1 | Medium–High (own plan doc when scheduled) |
+
+**Order within RA:** 1.0 → (1.1 ∥ 1.2) → 1.3 + 1.4 → 1.5 → 1.6. **Auth v2 and TLS land together or not at all** — a public bind with the current single shared cleartext token is a regression, not an intermediate state. RA2 is not scheduled; it waits for RA1 to prove the substrate.
+
+---
+
+## R3 — AI Capabilities *(⏸ parked 2026-07-09 — resumes after RA1; see `REMOTE_ACCESS_PLAN.md`)*
+
+*The redesign built the surfaces; R3 populates them. Every agent obeys C9: prepare and propose, the runner disposes. **Parked in favor of RA:** remote reachability is worth more right now than proactive agents — and R3 agents built after RA1 inherit the remote substrate (an agent digest readable from a phone anywhere beats one readable only at home).*
 
 | # | Item | Description | Why it matters | Dependencies | Complexity |
 |---|---|---|---|---|---|
@@ -224,9 +245,9 @@ Replace the full-width vertical stack of Fitness/Races/Records with a `grid grid
 
 ---
 
-## R4 — Automation
+## R4 — Automation *(⏸ parked 2026-07-09 — resumes after RA1, behind R3)*
 
-*Remove the human trigger where — and only where — the human isn't the point. Confirmation gates on writes remain non-negotiable.*
+*Remove the human trigger where — and only where — the human isn't the point. Confirmation gates on writes remain non-negotiable. **Parked with R3:** additionally, R4.1's scheduled scraping is better designed once RA1 has settled where the process actually runs (an always-on host makes scheduling more natural, and the DC-IP scrape validation in RA1.5 informs it).*
 
 | # | Item | Description | Why it matters | Dependencies | Complexity |
 |---|---|---|---|---|---|
@@ -247,7 +268,7 @@ Replace the full-width vertical stack of Fitness/Races/Records with a `grid grid
 | # | Item | Description | Why it matters | Dependencies | Complexity |
 |---|---|---|---|---|---|
 | R5.1 | **Native mobile client** | The long-anticipated app: Home as launch screen (built to budget for this), log-run + sync-nudge + deal alerts as the core loop. Precede with a typed/generated API contract (OpenAPI client) — the moment a second consumer exists, hand-matched string contracts stop scaling (design_decisions A5's named trigger). | The platform's stated destination; every API-first discipline since Phase 1 was bought for this. | R2.1 (hard gate), R2.6, R3.5; contract-generation spike | High |
-| R5.2 | **Remote access story** | Decide how Anton is reached off-LAN: private overlay (Tailscale-style) vs hosted. Revisit the deferred remote-MCP-for-ChatGPT transport here, not before. | Mobile off-WiFi and any third-party MCP client both need this answered; it's a security-architecture decision, not a feature. | R2.1, R2.2 | Medium–High |
+| R5.2 | **Remote access story** | **→ Pulled forward (2026-07-09): executed by RA1** — see `REMOTE_ACCESS_PLAN.md`. The original question (private overlay vs hosted) is answered there with a decisive fact: Claude connectors call from Anthropic's cloud, so a public HTTPS endpoint is required, and an overlay alone can't deliver the mobile-sync goal. The remote-MCP-for-ChatGPT transport remains deferred; revisit after RA1. | Mobile off-WiFi and any third-party MCP client both need this answered; it's a security-architecture decision, not a feature. | R2.1, R2.2 → superseded by RA1 | (absorbed into RA1) |
 | R5.3 | **Purchase-loop closure** | Optional provenance from deal → owned shoe: "I bought this" on a deal creates/links an owned shoe with purchase price pre-filled. Must respect B1 (wanting ≠ owning): an *optional recorded event*, never a forced workflow or FK entanglement. | Closes the platform's narrative loop (watch → buy → run → retire → replace) and feeds real cost/km from day one. | R2.4 (shared vocabulary) | Medium |
 | R5.4 | **Richer ingestion** | Candidates, each its own decision: per-run FIT-file detail (COROS MCP already exposes FIT downloads) for splits/HR curves; periodic Strava re-exports folded in via the existing idempotent importer; weather-at-run enrichment. Gate each on a question it answers, not on data availability. R2.7 T1 columns provide natural landing spots for split data. | The canonical `activities` table is deliberately a superset schema — it can absorb richer data without restructuring. | R2.3; per-source spikes | High (aggregate) |
 | R5.5 | **Longitudinal analytics** | The decade-scale questions: shoe-model performance correlations (pace/HR by shoe across years), wear-rate curves by type, injury-pattern context (the recurring left-leg history) annotated against volume spikes. R2.7 activity tags make this richer ("race pace trend over 3 years", "interval-session frequency vs PB trajectory"). Read-only analytics over `activities` — no new writes. | This is why eight years of history was imported and made canonical: Anton's endgame is *insight*, not logging. | R2.3, R2.7 T1, R5.4 helps | High |
@@ -260,19 +281,20 @@ Replace the full-width vertical stack of Fitness/Races/Records with a `grid grid
 ## Dependency Spine (the short version)
 
 ```
-R1 (loose ends) ─▶ R2.1 Security ─▶ R2.2 Schema ─▶ R2.3 Indexed reads ─┬▶ R3 agents ─▶ R4 automation ─▶ R5.1 Mobile
-                                        │                                └▶ R5.2 Remote access
-                                        └▶ R2.7 Training Depth
-                                              T1 → T2 → T3
-                                              T1 → T4 / T5 / T6
-                                              T6 → T7
-                                              T2 → T8
+R1 (loose ends) ─▶ R2 (security · schema · platform — complete 2026-07-08)
+                        │
+                        ▼
+                  RA1 Remote backend (auth v2 + always-on host + cutover)   ← executes R5.2
+                        │            RA1.0 D0/spikes → (RA1.1 ∥ RA1.2) → RA1.3+RA1.4 → RA1.5 → RA1.6
+                        ├▶ R3 agents (parked) ─▶ R4 automation (parked) ─▶ RA2 remote clients ─▶ R5.1 Mobile
+                        └▶ (RA2 can also precede R3/R4 if the pocket UI matters sooner)
+R2.7 Training Depth (complete): T1 → T2 → T3 · T1 → T4/T5/T6 · T6 → T7 · T2 → T8
 R2.5 Observability ─▶ R4.1 Scheduling ─▶ R4.2/4.5
 R3.5 Channel ─▶ everything proactive
 R2.7 T5 (fitness metrics) ─▶ R3.4 (fitness resource) ─▶ R3.6 (race advisor richer)
 ```
 
-Two rules fall out of the spine: **nothing unattended before R2.1**, and **nothing scheduled before R2.5**. Everything else is negotiable in order.
+Three rules fall out of the spine: **nothing unattended before R2.1** (satisfied), **nothing scheduled before R2.5** (satisfied), and **nothing internet-exposed before RA1's auth v2 + TLS land together** — a public bind with the single shared cleartext token is a regression, not an intermediate state. Everything else is negotiable in order.
 
 ---
 
