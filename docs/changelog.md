@@ -5,6 +5,22 @@
 
 ---
 
+## 🐳 RA1.2 — Deployment substrate (Dockerfile + Caddy + docker-compose + INV-9) — 2026-07-09
+
+**[ADDED] Containerization + reverse-proxy config + invariant documentation. Suite stable at 194 passing (no code changes — "196" in previous entry was a 2-count doc drift). No schema changes. One `ra1:` commit.**
+
+- **[ADDED] `backend/Dockerfile`** — Python 3.11-slim base; `playwright install --with-deps chromium` installs the Chromium browser and all OS-level shared libs in one step; requirements.txt pins intact (A7); `TZ=America/Toronto` set at OS level (run-date logic already passes the timezone explicitly, this ensures nothing can silently read UTC from the host clock); CMD is `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1`. One worker is not a default — it is INV-9 (see below).
+- **[ADDED] `backend/.dockerignore`** — excludes venv, tests/, dev scripts (view_db.py, seed_data.py, test_scraper.py), `.env`, and all `*.db` / `*.bak*` files. Secrets injected at runtime; DB lives on the mounted data volume.
+- **[ADDED] `docker-compose.yml`** (repo root) — for local dev / integration testing. Port bound to `127.0.0.1:8000` only (never `0.0.0.0`); `${ANTON_DATA_DIR:-${HOME}/anton-data}:/data` volume mount; `DATABASE_URL=sqlite:////data/shoe_deals.db` + `TZ=America/Toronto` injected; `env_file: ./backend/.env` for secrets; `restart: unless-stopped`; healthcheck on `GET /health` (30 s interval, 15 s start).
+- **[ADDED] `deploy/Caddyfile`** — Caddy 2 reverse-proxy config for the cloud-VM host. Key properties: (1) `flush_interval -1` on the `reverse_proxy` block — flushes immediately, required for all three unbuffered transports (chat SSE `POST /api/chat/message`, scrape-progress SSE `GET /api/scrape/stream`, MCP Streamable HTTP `/mcp/*`); buffered proxy breaks all three. (2) Credential-redacting log filter: deletes `uri`, `request>uri`, `Authorization`, and `Cookie` fields before writing — mandatory if the capability-URL connector token is in play (the token appears as a URI path segment on every request; RA1.3 names this a hard precondition). (3) HSTS header (activate after TLS is confirmed). (4) Auto Let's Encrypt TLS on the named domain block (replace `YOUR_DOMAIN` with the actual hostname before deploy).
+- **[ADDED] `deploy/.env.production.example`** — production env template covering `DATABASE_URL`, `ANTON_TOKENS`, `ANTON_CONNECTOR_TOKEN`, `CHAT_RATE_LIMIT_*`, `ANTHROPIC_API_KEY`, `MCP_SERVER_URL`, `TZ`, and scraping settings. Every required field has `REPLACE_ME`; notes cite the design decision that owns each setting.
+- **[CHANGED] `CLAUDE.md §14` — INV-9 added:** *"exactly one Uvicorn worker must be running — D4's in-process scrape lock and E8's in-process rate limiter each assume a single process; multiple workers give each its own lock state and rate-limit bucket, silently breaking both invariants. Owned by deployment config (`--workers 1` in Dockerfile CMD). Verify in `docker ps` / uvicorn logs on any restart."* Enforcement is config-level, not code-level; if multiple workers are needed, redesign D4/E8 first.
+- **[NOTED] Remaining RA1.2 acceptance criteria are human steps** (cannot be verified without a provisioned host): deployed instance serves `/health` over HTTPS; chat SSE + scrape SSE + MCP streaming verified through the live Caddy proxy; exactly one worker confirmed in process list. These execute during RA1.5 cutover.
+
+**[VERIFIED] Suite 194 passing** (`venv/bin/python -m pytest`; no code changes — all new files are deployment artifacts and documentation). Note: project_state previously recorded "196" after RA1.1; the actual count is 194 (a 2-test count drift in the docs, likely from the `test_auth.py` rewrite replacing 2 tests net). No `vite build` needed (no UI work). No migration (no schema changes). **RA1.2 → ✅** (roadmap + `REMOTE_ACCESS_PLAN.md §6`).
+
+---
+
 ## 🔐 RA1.0 + RA1.1 — Hosting decision, auth v2 (per-client tokens + capability-URL) — 2026-07-09
 
 **[CHANGED/ADDED] RA1.0 research spikes (S1–S3) answered; hosting decision D0 made; RA1.1 auth v2 shipped. Also: R2.7.2 — activity-tagged past races auto-surface in the Races card + View-all dialogs. Suite 188 → 196 (+8 auth: named-token map, capability-URL; +2 races). One `ra1:` commit + one `r2:` commit.**
