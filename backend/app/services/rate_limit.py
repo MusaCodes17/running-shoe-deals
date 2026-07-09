@@ -1,21 +1,28 @@
 """
-In-process rate limiting — the R2.1-adjacent throttle (roadmap R2, SECURITY_PASS_PLAN §6).
+In-process rate limiting (roadmap R2 / RA1.3).
 
-R2.1 stopped *anonymous* LLM spend (a bearer token now gates `/api`). It does
-**not** stop an *authenticated* client — the SPA with a retry bug, a user's own
-script, a runaway agent loop — from hammering `POST /api/chat/message` and
-burning the owner's paid Anthropic/OpenAI/Gemini credits. This module is that
-backstop: a token-bucket limiter that caps the request rate per client.
+Three limiters live here, each scoped to a different threat:
 
-Deliberately **not** a security boundary — `app/middleware/auth.py` is. Under the
-single-user LAN threat model the realistic adversary is a *bug*, not a botnet, so
-this bounds accidental spend and loops, not a hostile flood.
+1. `chat_limiter` — caps `POST /api/chat/message` per client IP to prevent a
+   runaway authenticated loop from burning paid LLM credits (R2.1-adjacent).
+   Adversary model: a bug, not a botnet. Tunable via `CHAT_RATE_LIMIT_*` env vars.
 
-Single-process by design (CLAUDE.md §4.6 / design_decisions D4/E5): the bucket
-state lives in memory, exactly like the scrape lock and the SSE state. If Anton
-ever grows a second worker this — like the scrape lock — needs DB-level
-coordination; that is out of scope until a scheduler exists (R4.1), and is
-labelled here rather than solved silently.
+2. `auth_failure_limiter` — caps bearer-token failures (401s from auth middleware)
+   per client IP. Adversary model: credential-stuffing bots. Goal: make a brute-
+   force attempt slow and visible in the log before it succeeds (RA1.3).
+   Tunable via `AUTH_FAILURE_LIMIT_PER_MINUTE` / `AUTH_FAILURE_BURST`.
+
+3. `login_failure_limiter` — caps `POST /oauth/login` password failures per client
+   IP. Adversary model: brute-force against the single-user OAuth login page.
+   Tunable via `LOGIN_FAILURE_LIMIT_PER_MINUTE` / `LOGIN_FAILURE_BURST`.
+
+All limiters are deliberately **not** security boundaries alone — they are
+visibility and throttling aids. `app/middleware/auth.py` is the boundary.
+
+Single-process by design (CLAUDE.md §4.6 / design_decisions D4/E8/INV-9): the
+bucket state lives in memory. If Anton ever grows a second worker these — like
+the scrape lock — need DB-level coordination; that is out of scope until a
+scheduler exists (R4.1), and is labelled here rather than solved silently.
 """
 from __future__ import annotations
 
@@ -115,6 +122,33 @@ def _build_chat_limiter() -> KeyedRateLimiter:
     return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0)
 
 
-# Module singleton wired into routers/chat.py. Tests build their own instances
-# with an injected clock rather than poking this one.
+def _build_auth_failure_limiter() -> KeyedRateLimiter:
+    """Per-IP limiter for bearer-token 401 failures (RA1.3).
+
+    Default: 10 failures allowed in a burst, refilling at 10/minute (one every
+    6 seconds). A legitimate client should never fail auth more than once; this
+    allows a handful of mis-configured retries while throttling a brute-force
+    attempt to 1 test/6 seconds after the initial burst is exhausted.
+    Tune via `AUTH_FAILURE_LIMIT_PER_MINUTE` / `AUTH_FAILURE_BURST`."""
+    per_min = float(os.getenv("AUTH_FAILURE_LIMIT_PER_MINUTE", "10"))
+    burst = float(os.getenv("AUTH_FAILURE_BURST", str(per_min)))
+    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0)
+
+
+def _build_login_failure_limiter() -> KeyedRateLimiter:
+    """Per-IP limiter for OAuth login-page password failures (RA1.3).
+
+    Default: 5 failures allowed in a burst, refilling at 5/minute. A legitimate
+    user never fails the password more than once or twice; this stops a brute-
+    force against the single-user login page. Tune via
+    `LOGIN_FAILURE_LIMIT_PER_MINUTE` / `LOGIN_FAILURE_BURST`."""
+    per_min = float(os.getenv("LOGIN_FAILURE_LIMIT_PER_MINUTE", "5"))
+    burst = float(os.getenv("LOGIN_FAILURE_BURST", str(per_min)))
+    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0)
+
+
+# Module singletons. Tests build their own instances with an injected clock
+# rather than poking these (avoids inter-test state leakage).
 chat_limiter = _build_chat_limiter()
+auth_failure_limiter = _build_auth_failure_limiter()
+login_failure_limiter = _build_login_failure_limiter()

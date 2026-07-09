@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from app.database import run_migrations
 from app.mcp_server import mcp
+from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
 from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router
 
@@ -64,15 +65,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Bearer-token auth (R2.1). Added BEFORE CORS so that CORS is the *outer* wrapper
-# (Starlette's add_middleware makes the last-added middleware outermost): a 401
-# from auth then still gets CORS headers, so the browser surfaces a clean 401
-# rather than an opaque CORS error. See app/middleware/auth.py.
+# Middleware stack (Starlette: last-added = outermost):
+#
+#  AccessLogMiddleware   ← outermost — measures total latency, logs final status
+#  CORSMiddleware        ← adds CORS headers so 401s are browser-visible
+#  BearerAuthMiddleware  ← innermost — enforces auth; sets scope["anton_client"]
+#
+# Auth is innermost so 401s still get CORS headers (browser can read them).
+# AccessLog is outermost so it sees the complete status + total duration.
+
 app.add_middleware(BearerAuthMiddleware)
 
-# Configure CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -80,6 +84,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# RA1.3: structured access log — one line per request. Added last = outermost.
+app.add_middleware(AccessLogMiddleware)
 
 # Include routers
 app.include_router(shoes.router, prefix="/api")
