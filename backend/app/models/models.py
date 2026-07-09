@@ -485,6 +485,7 @@ class AthleteMetric(Base):
     vo2max = Column(Float, nullable=True)                        # ml/kg/min
     threshold_pace_s_per_km = Column(Integer, nullable=True)     # lactate threshold pace
     race_predictions = Column(JSON, nullable=True)               # {"5.0": 1234, "10.0": 2468, ...} distance_km → predicted_s
+    running_level = Column(Float, nullable=True)                 # COROS running level score (F3)
     captured_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     def __repr__(self):

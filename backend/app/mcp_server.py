@@ -1045,16 +1045,16 @@ def record_athlete_metrics(
     vo2max: Optional[float] = None,
     threshold_pace_s_per_km: Optional[int] = None,
     race_predictions: Optional[dict] = None,
+    running_level: Optional[float] = None,
 ) -> dict:
     """
     Record a COROS athlete-level fitness snapshot (VO2 max, lactate-threshold
-    pace, race predictions) for the Training tab's fitness card. Append-only:
-    each call stores one dated snapshot; the card shows the most recent.
+    pace, race predictions, running level) for the Training tab's fitness card.
+    Append-only: each call stores one dated snapshot; the card shows the most recent.
 
-    Anton cannot fetch these itself (server-side COROS is dormant). Get them from
-    the COROS MCP — `queryFitnessAssessmentOverview` (VO2 max, threshold pace,
-    race predictions) — then CONFIRM the values with the runner before calling
-    this (C9): "COROS reports VO2 max 62, threshold 3:45/km — record this?".
+    Anton cannot fetch these itself (server-side COROS is dormant). Use the
+    sync_fitness prompt to fetch from the COROS MCP and confirm with the runner
+    (C9) before calling this.
 
     Args:
         vo2max: VO2 max in ml/kg/min.
@@ -1063,8 +1063,9 @@ def record_athlete_metrics(
         race_predictions: dict of distance_km (as a string key) → predicted time
             in seconds, e.g. {"5.0": 1005, "10.0": 2100, "21.0975": 4620,
             "42.195": 9720}.
+        running_level: COROS running level score (a composite fitness rating).
     """
-    if vo2max is None and threshold_pace_s_per_km is None and not race_predictions:
+    if vo2max is None and threshold_pace_s_per_km is None and not race_predictions and running_level is None:
         return {"success": False, "error": "Provide at least one metric to record."}
     with get_session() as db:
         snap = fitness_svc.record_snapshot(
@@ -1072,6 +1073,7 @@ def record_athlete_metrics(
             vo2max=vo2max,
             threshold_pace_s_per_km=threshold_pace_s_per_km,
             race_predictions=race_predictions,
+            running_level=running_level,
         )
         return {
             "success": True,
@@ -1079,6 +1081,7 @@ def record_athlete_metrics(
             "vo2max": snap.vo2max,
             "threshold_pace_s_per_km": snap.threshold_pace_s_per_km,
             "race_predictions": snap.race_predictions,
+            "running_level": snap.running_level,
         }
 
 
@@ -1691,4 +1694,64 @@ to check replacement deals or add a note.
   the specific error and continue processing the rest
 - Keep the tone direct and concise — this user is a competitive
   runner who wants clear information, not chattiness
+"""
+
+
+@mcp.prompt()
+def sync_fitness() -> str:
+    """
+    Sync COROS athlete fitness metrics (VO2 max, threshold pace, race
+    predictions, running level) into Anton's Training tab fitness card.
+    Fetches the latest snapshot from COROS, confirms with the runner,
+    then records it via record_athlete_metrics.
+    """
+    return """# COROS Fitness Sync Agent
+
+You are syncing athlete-level fitness metrics from COROS into Anton.
+Follow this exact process.
+
+## Step 1 — Fetch fitness assessment from COROS
+Call `queryFitnessAssessmentOverview` from the COROS MCP connector.
+This returns VO2 max, lactate-threshold pace, race predictions, and
+running level. Do NOT call record_athlete_metrics yet.
+
+## Step 2 — Present the fetched values for confirmation (C9)
+Show every metric you received in a clear table, e.g.:
+
+"COROS reports the following fitness metrics — confirm to record?
+
+| Metric | Value |
+|--------|-------|
+| VO2 Max | 62.0 ml/kg/min |
+| Threshold pace | 3:45/km (225 s/km) |
+| Running level | 74.5 |
+| Race predictions | 5k: 19:15 · 10k: 40:00 · HM: 1:28:30 · Marathon: 3:03:00 |
+
+Record this snapshot? (yes/no)"
+
+Convert threshold pace to seconds/km for storage (e.g. 3:45/km → 225).
+Convert race prediction times to seconds for storage.
+Format race_predictions as {"5.0": <s>, "10.0": <s>, "21.0975": <s>, "42.195": <s>}.
+Include only distances the COROS response actually provides.
+
+## Step 3 — Wait for runner confirmation
+Do NOT call record_athlete_metrics until the runner says yes (or equivalent).
+If the runner corrects a value, use the corrected version.
+
+## Step 4 — Record the confirmed snapshot
+Call record_athlete_metrics with the confirmed values:
+- vo2max (Float, ml/kg/min)
+- threshold_pace_s_per_km (Integer, seconds/km)
+- race_predictions (dict, distance string → seconds Integer)
+- running_level (Float)
+
+## Step 5 — Confirm success
+"Fitness snapshot recorded (captured_at: <timestamp>). The Training tab
+fitness card will now show the updated metrics."
+
+## General rules
+- Never record metrics without explicit runner confirmation (C9)
+- Never invent or extrapolate values not present in the COROS response
+- If queryFitnessAssessmentOverview fails or returns no data, say so and stop
+- Keep the tone direct and concise
 """
