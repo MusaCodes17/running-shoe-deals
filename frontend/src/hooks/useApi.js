@@ -17,6 +17,7 @@ import {
   shoeTypesApi,
   chatHistoryApi,
   checkpointsApi,
+  adminApi,
   SCRAPE_STREAM_URL,
   authHeaders,
 } from '@/services/api'
@@ -31,6 +32,7 @@ export const queryKeys = {
   deals: (params) => ['deals', params ?? {}],
   dashboardStats: () => ['dashboard', 'stats'],
   scrapeHistory: () => ['scrape', 'history'],
+  schedule: () => ['admin', 'schedule'],
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
@@ -214,6 +216,17 @@ export function useScrapeHistory() {
   return useQuery({
     queryKey: queryKeys.scrapeHistory(),
     queryFn: () => scrapeApi.history(),
+  })
+}
+
+// Nightly schedule status (R4.1): enabled state, cron expression, next fire
+// time, and last 5 scheduled runs. Refreshed every 60 s so the "next run"
+// countdown stays reasonably current without hammering the backend.
+export function useSchedule() {
+  return useQuery({
+    queryKey: queryKeys.schedule(),
+    queryFn: () => adminApi.scheduleStatus(),
+    refetchInterval: 60_000,
   })
 }
 

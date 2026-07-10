@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.models import Deal, PriceRecord
+from app.models.models import Deal, PriceRecord, ScrapeRun
 from app.scrapers.base_scraper import BaseScraper
-from app.scrapers.lock import force_release_scrape_lock
+from app.scrapers.lock import force_release_scrape_lock, is_scrape_running
+from app.services import schedule as schedule_svc
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -59,4 +60,43 @@ def cleanup_kids_shoes(db: Session = Depends(get_db)):
     return {
         "removed_price_records": len(bad_records),
         "removed_deals": len(bad_deals),
+    }
+
+
+@router.get("/schedule", response_model=dict)
+def get_schedule_status(db: Session = Depends(get_db)):
+    """
+    Current state of the nightly scrape schedule (R4.1).
+
+    Returns the APScheduler configuration (enabled, cron, next fire time),
+    whether a scrape is running right now, and the five most recent
+    scheduled-trigger runs from scrape_runs for quick health-at-a-glance.
+    """
+    status = schedule_svc.get_status()
+
+    recent = (
+        db.query(ScrapeRun)
+        .filter(ScrapeRun.trigger == "scheduled")
+        .order_by(ScrapeRun.started_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    return {
+        **status,
+        "is_scraping_now": is_scrape_running(),
+        "recent_scheduled_runs": [
+            {
+                "id": r.id,
+                "retailer_id": r.retailer_id,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "status": r.status,
+                "shoes_scraped": r.shoes_scraped,
+                "products_found": r.products_found,
+                "deals_found": r.deals_found,
+                "error": r.error,
+            }
+            for r in recent
+        ],
     }

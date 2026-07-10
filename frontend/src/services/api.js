@@ -256,6 +256,11 @@ export const checkpointsApi = {
       .then((r) => r.data),
 }
 
+// ============== ADMIN ==============
+export const adminApi = {
+  scheduleStatus: () => client.get('/api/admin/schedule').then((r) => r.data),
+}
+
 // ============== COROS SYNC ==============
 export const corosSyncApi = {
   status: () => client.get('/api/owned-shoes/sync-coros/status').then((r) => r.data),

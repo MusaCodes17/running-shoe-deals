@@ -23,7 +23,7 @@ from app.scrapers.lock import release_scrape_lock
 logger = logging.getLogger(__name__)
 
 
-def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int]) -> dict:
+def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int], trigger: str = "background") -> dict:
     """
     Runs inside a worker thread (via asyncio.to_thread) — SQLAlchemy
     sessions aren't safe to share across threads, so this opens and closes
@@ -43,13 +43,13 @@ def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int]) -> dict:
         # stamps last_scraped_at to the run's finish time (matching the
         # retailer_done event's timestamp below), and commits — this thread
         # owns its own session, so all that persistence happens here.
-        result = manager.scrape_retailer(retailer, shoes, trigger="background")
+        result = manager.scrape_retailer(retailer, shoes, trigger=trigger)
         return {"deals_found": result["deals_found"], "errors": result["errors"]}
     finally:
         db.close()
 
 
-async def run_scrape_job(retailer_ids: Optional[List[int]] = None) -> None:
+async def run_scrape_job(retailer_ids: Optional[List[int]] = None, trigger: str = "background") -> None:
     """
     The caller (POST /api/scrape/all) has already synchronously acquired
     the shared scrape lock (try_acquire_scrape_lock) before scheduling this
@@ -95,7 +95,7 @@ async def run_scrape_job(retailer_ids: Optional[List[int]] = None) -> None:
                 # its own thread (politeness/rate-limiting + per-scraper
                 # instance state like Algolia credential caching depend on
                 # that); retailers run concurrently with each other via gather.
-                result = await asyncio.to_thread(_scrape_one_retailer, retailer_id, shoe_ids)
+                result = await asyncio.to_thread(_scrape_one_retailer, retailer_id, shoe_ids, trigger)
                 await scrape_state.publish({
                     "type": "retailer_done",
                     "retailer": name,

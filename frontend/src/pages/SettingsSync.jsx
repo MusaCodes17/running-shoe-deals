@@ -1,4 +1,4 @@
-import { RefreshCw, Watch, Import, Activity } from 'lucide-react'
+import { RefreshCw, Watch, Import, Activity, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import ScrapeButton from '@/components/ScrapeButton'
 import {
@@ -6,6 +6,7 @@ import {
   useCorosSyncStatus,
   useStravaStatus,
   useScrapeHistory,
+  useSchedule,
 } from '@/hooks/useApi'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 
@@ -71,6 +72,7 @@ export default function SettingsSync() {
   const coros = useCorosSyncStatus()
   const strava = useStravaStatus()
   const history = useScrapeHistory()
+  const schedule = useSchedule()
   const retailers = history.data?.retailers ?? []
   const needsAttention = retailers.filter(
     (r) => r.health === 'warning' || r.health === 'error'
@@ -78,7 +80,7 @@ export default function SettingsSync() {
 
   return (
     <div className="space-y-5">
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
       {/* Deal scraping */}
       <Card>
         <CardHeader>
@@ -94,6 +96,58 @@ export default function SettingsSync() {
             value={stats.data?.last_scrape ? formatRelativeTime(stats.data.last_scrape) : 'Never'}
           />
           <ScrapeButton className="w-full" />
+        </CardContent>
+      </Card>
+
+      {/* Scheduled scraping (R4.1) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Clock className="h-4 w-4 text-accent-foreground" />
+            Scheduled scraping
+          </CardTitle>
+          <CardDescription>Nightly automatic price scan.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StatRow
+            label="Status"
+            value={
+              schedule.data == null
+                ? null
+                : schedule.data.enabled
+                  ? 'Enabled'
+                  : 'Disabled'
+            }
+          />
+          <StatRow label="Schedule" value={schedule.data?.cron ?? null} />
+          <StatRow
+            label="Next run"
+            value={
+              schedule.data?.next_run_utc
+                ? formatRelativeTime(schedule.data.next_run_utc)
+                : schedule.data?.enabled === false
+                  ? 'Not scheduled'
+                  : null
+            }
+          />
+          {(() => {
+            const runs = schedule.data?.recent_scheduled_runs ?? []
+            const last = runs[0]
+            return (
+              <StatRow
+                label="Last scheduled run"
+                value={
+                  last
+                    ? `${last.status} · ${last.deals_found} deal${last.deals_found === 1 ? '' : 's'}${last.started_at ? ' · ' + formatRelativeTime(last.started_at) : ''}`
+                    : 'Never'
+                }
+              />
+            )
+          })()}
+          <p className="mt-3 text-xs text-faint">
+            Set <code>SCRAPE_SCHEDULE_ENABLED=true</code> in the backend .env to activate. Schedule
+            is a crontab string in <code>SCRAPE_SCHEDULE_CRON</code> (America/Toronto).
+          </p>
         </CardContent>
       </Card>
 

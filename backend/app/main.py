@@ -13,6 +13,7 @@ from app.mcp_server import mcp
 from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
 from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router
+from app.services import schedule as schedule_svc
 
 # Load environment variables
 load_dotenv()
@@ -45,16 +46,21 @@ def require_auth_config() -> None:
 async def lifespan(app: FastAPI):
     """
     Validate the auth secret, upgrade the DB to Alembic head (R2.2 — the sole
-    schema authority), then run the MCP server's session manager for the lifetime
-    of the app. Streamable HTTP transport needs that session manager's task group
-    active — mounting mcp.streamable_http_app() alone doesn't run a sub-app's
-    lifespan, so it's merged in here instead.
+    schema authority), start the nightly scrape scheduler (R4.1), then run the
+    MCP server's session manager for the lifetime of the app. Streamable HTTP
+    transport needs that session manager's task group active — mounting
+    mcp.streamable_http_app() alone doesn't run a sub-app's lifespan, so it's
+    merged in here instead.
     """
     require_auth_config()
     run_migrations()
     print("✅ Database migrated to head")
-    async with mcp.session_manager.run():
-        yield
+    schedule_svc.start()
+    try:
+        async with mcp.session_manager.run():
+            yield
+    finally:
+        schedule_svc.shutdown()
 
 
 # Create FastAPI app

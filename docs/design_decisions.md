@@ -291,7 +291,7 @@
 **Why (recorded):** Stacked triggers once meant "scraping forever"; refusing is legible, queuing hides cost.
 **Advantages:** At most one scrape exists; trivially reasoned about.
 **Trade-offs:** In-memory ⇒ single-process assumption (invalid under multi-worker); coarse — a one-shoe scrape blocks everything.
-**Verdict:** 🕐 Keep for now. Revisit trigger: scheduled scraping or any multi-process move ⇒ persist coordination (architecture.md §16.6).
+**Verdict:** ✅ Keep the in-memory lock. **Resolved by R4.1 (2026-07-10):** scheduled scraping arrived and the lock was *not* replaced — deliberate. APScheduler `max_instances=1` prevents scheduler-level stacking; the in-memory `threading.Lock` remains the cross-path guard (manual trigger vs. scheduler vs. MCP). Both layers together mean at most one scrape runs at a time under INV-9 single-process. Persist coordination only if multi-worker is ever introduced (remains a red-line — see INV-9 and D4 trade-offs above).
 
 ### D5. Background scrape = per-retailer threads over the same primitive; SSE with full-history replay
 **Chosen:** `/scrape/all` runs retailers concurrently (one thread + one DB session each; shoes sequential within), publishing progress to an in-memory pub/sub whose late subscribers receive the full event history. Documented as an *additional* path over the same per-(shoe, retailer) unit, not a replacement.
@@ -320,7 +320,7 @@
 **On the single-process lock (the decision R2.5 was said to "force"):** R2.5 records history but deliberately **does not** change D4's in-memory lock. Observability is orthogonal to coordination: a durable `scrape_runs` table does not require durable *locking*. The single-process lock stays as-is (🕐); the forcing function for replacing it is R4.1's *scheduled/unattended* execution, not R2.5's *record-keeping*. Naming it here so a future session doesn't re-open D4 prematurely.
 **Advantages:** Health is a query; up-front `running` commit makes in-flight/crashed scrapes visible (verified live); one write path keeps the invariant (CLAUDE.md §2.2); cascade-deleted with its retailer (disposable deals-domain telemetry, §2.6).
 **Trade-offs:** Only the two full-catalog flows (background `/scrape/all`, synchronous `/scrape/retailer/{id}`) emit runs so far; the shoe-major `scrape_all_shoes` / single-shoe path (MCP `trigger_scrape` sans shoe_id) doesn't yet — deliberate, its grain is wrong for a per-retailer run.
-**Verdict:** ✅ Keep. Revisit when R4.1 adds `trigger="scheduled"` and a watchdog reads the trend.
+**Verdict:** ✅ Keep. **R4.1 (2026-07-10):** `trigger="scheduled"` is now live — `ScrapeOrchestrator.scrape_retailer` accepts the trigger arg and stamps each row; `GET /api/admin/schedule` queries the last 5 scheduled runs for quick health-at-a-glance. Watchdog trend reads remain future work (R4.5).
 
 ---
 
@@ -402,6 +402,16 @@ What shipped (RA1.1b):
 **Why:** The connector UI requires OAuth (GitHub issues #112/#411 — no bearer-header support). Capability-URL leaked into every log line (path segment = credential → RA1.3 log redaction would have been mandatory AND the gap between shipping the path and hardening logs was a window of exposure). Deleting dark code over keeping it was the right call.  
 **Trade-offs:** `ANTON_TOKENS` change still requires a restart (same as E7/RA1.1). The test suite sets `ANTON_HOST_URL` in `test_oauth.py` module-level setup, so OAuth routes are wired for those tests; `test_auth.py` does not set it (keeps middleware tests focused on named-bearer behavior). SQLite sync calls in the async middleware path are acceptable under INV-9 (single-process, single-user).  
 **Verdict:** ✅ Keep. Named bearer tokens (desktop/loopback/spa) + OAuth (claude.ai connector) are now the complete auth surface for RA1.
+
+---
+
+### C11. R3.5 notification channel deliberately deferred, not built speculatively
+**Chosen (2026-07-10):** the outbound notification channel (R3.5 — email or a digest endpoint) is not built now, even though R4.2/R4.3/R4.5 all name it as a dependency. R3.1/R3.2 already ship pull-based agent output (`get_weekly_summary`, `get_deal_alerts` MCP tools, live and invocable on demand); R3.5 would only add *unprompted* delivery, and nothing yet exists that needs to push — R4 (the unattended/scheduled work) hadn't started when this was decided.
+**Why:** designing a channel ahead of real usage means guessing at requirements — email vs. pull digest, trigger conditions, noise tolerance — with nothing to check the guess against. The runner's own call: build R4.1 (scheduled scraping) first, which has no R3.5 dependency, and let it surface whether unattended output actually needs pushing before designing for it.
+**Advantages:** avoids building infrastructure for a need that might not materialize in the assumed shape; the eventual channel gets designed against a felt problem instead of a hypothetical one.
+**Trade-offs:** R4.2, R4.3, and R4.5 stay blocked until this is revisited — a known, accepted cost, not an oversight.
+**Precedent:** the same judgment as C10 (declined to normalize the chat schema — "speculative infra" at single-user scale) and A5 (typed API contract waits for "a second consumer exists," not built ahead of need).
+**Verdict:** 🕐 Keep for now. Revisit trigger: reaching R4.2, R4.3, or R4.5 and finding the lack of a channel is a felt problem ("this fired and I never saw it"). See `docs/roadmap.md` R3.5 deferral note and R4 reordering (2026-07-10).
 
 ---
 
