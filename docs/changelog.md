@@ -5,6 +5,30 @@
 
 ---
 
+## R4.1 — Scheduled nightly scraping — 2026-07-10
+
+**[ADDED] `services/schedule.py` + lifespan hooks + `GET /api/admin/schedule` + SettingsSync card + 9 tests. No schema changes. Suite 298 → 307 (+9). One `r4:` commit.**
+
+- **[ADDED] `backend/app/services/schedule.py`:** `AsyncIOScheduler` (APScheduler 3.x, timezone=America/Toronto) started in the FastAPI lifespan. Opt-in via `SCRAPE_SCHEDULE_ENABLED=true` env; cron expression via `SCRAPE_SCHEDULE_CRON` (default `"0 3 * * *"`, i.e. 3 AM Toronto). Job registered with `coalesce=True, max_instances=1` to prevent scheduler-level stacking. `_run_scheduled_scrape()` checks the in-memory lock first (try_acquire_scrape_lock) then calls `run_scrape_job(trigger="scheduled")`. `get_status()` returns `{enabled, cron, next_run_utc, scheduler_running}`. `start()`/`shutdown()` called from lifespan; scheduler always starts (so `scheduler_running=True` in prod) but only registers the cron job when enabled. APScheduler 3.11.3 added to `requirements.txt` (3.x not 4.x — different API; re-admitted per R1.6; requires `pytz` already present).
+
+- **[CHANGED] `backend/app/scrape_runner.py`:** `_scrape_one_retailer(retailer_id, shoe_ids, trigger="background")` — added `trigger` keyword arg; passes it into `manager.scrape_retailer(retailer, shoes, trigger=trigger)`. `run_scrape_job(db, trigger="background")` — same pattern; threads `trigger` into the `asyncio.to_thread` call. Previously "background" was hardcoded; the scheduler passes "scheduled" to distinguish nightly runs in `scrape_runs` records.
+
+- **[CHANGED] `backend/app/main.py`:** Added `schedule_svc.start()` before the MCP session manager context and `schedule_svc.shutdown(wait=False)` in `finally`. Import added at top.
+
+- **[ADDED] `GET /api/admin/schedule`:** In `routers/admin.py`. Returns `{enabled, cron, next_run_utc, scheduler_running, is_scraping_now, recent_scheduled_runs[5]}`. `recent_scheduled_runs` queries `scrape_runs WHERE trigger='scheduled' ORDER BY started_at DESC LIMIT 5` — fast health-at-a-glance without a separate table. Auth-gated by the app-wide bearer middleware.
+
+- **[ADDED] `adminApi.scheduleStatus()` / `useSchedule()` hook:** `frontend/src/services/api.js` → `adminApi.scheduleStatus`. `frontend/src/hooks/useApi.js` → `useSchedule()` React Query hook with `refetchInterval: 60_000` (1-minute polling, cheap given the endpoint is lightweight).
+
+- **[CHANGED] `frontend/src/pages/SettingsSync.jsx`:** Added a "Scheduled Scraping" card (Clock icon). Shows Status (Enabled/Disabled), Schedule (cron string), Next run (relative time, "Not scheduled" when disabled), Last scheduled run (status · deals · relative time, "Never" when none). Env var hint in card footer. Grid changed from `lg:grid-cols-3` to `sm:grid-cols-2` to hold 4 cards cleanly.
+
+- **[ADDED] `backend/tests/test_schedule.py`:** 9 tests — `test_get_status_disabled_by_default`, `test_get_status_enabled_flag`, `test_get_status_custom_cron`, `test_get_status_false_string_not_enabled` (unit, monkeypatched env); `test_run_scrape_job_accepts_trigger_param`, `test_scrape_one_retailer_accepts_trigger_param` (signature inspection, no DB); `test_schedule_endpoint_shape`, `test_schedule_endpoint_requires_auth` (401 or 429 — rate limiter fires first after many unauthed requests across the test run), `test_schedule_endpoint_disabled_by_default` (anyio, ASGI transport).
+
+**[CHANGED] `docs/design_decisions.md` D4:** Verdict updated — in-memory lock deliberately kept. APScheduler `max_instances=1` prevents scheduler-level stacking; `threading.Lock` guards cross-path conflicts (manual / scheduler / MCP). Together: at most one scrape at a time under INV-9. Persist coordination only if multi-worker is introduced (red-line). D8 "Revisit" note updated to record that `trigger="scheduled"` and the admin schedule endpoint are live.
+
+**[VERIFIED]** Suite **307 passing** (`venv/bin/pytest -q`). 9 new tests — all green. No schema changes; no migration (trigger field on `ScrapeRun` already existed from R2.5 with "scheduled arrives with R4.1" comment). `vite build` clean. SettingsSync page checked: Scheduled Scraping card renders; Status=Disabled; Next run="Not scheduled"; Last scheduled run="Never" — all correct defaults when env var unset.
+
+---
+
 ## R3.6 — Race-block training advisor — 2026-07-10
 
 **[ADDED] `services/race_advisor.py` + `get_race_block_context` MCP tool + `race_block_advisor` MCP prompt. No schema changes. Suite 282 → 298 (+14). One `r3:` commit.**
