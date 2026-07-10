@@ -224,6 +224,16 @@ class BaseScraper(ABC):
         """URL to scan for site-wide promo codes (overridable per retailer)."""
         return self.base_url
 
+    def get_promo_page_urls(self) -> List[str]:
+        """
+        URLs to check for site-wide promo codes (R4.4).
+
+        Default: the homepage only. Subclasses can override to append
+        additional pages (sale pages, promotions pages, etc.) so the
+        coupon hunter sees more than just the homepage banner.
+        """
+        return [self.get_homepage_url()]
+
     @staticmethod
     def _looks_like_code(token: str) -> bool:
         """Filter out prose accidentally captured after the word 'code'."""
@@ -290,16 +300,31 @@ class BaseScraper(ABC):
         return list(found.values())
 
     def scrape_promo_codes(self) -> List[Dict]:
-        """Fetch the retailer homepage and extract any promo codes found."""
-        url = self.get_homepage_url()
-        html = self.fetch_page(url, use_browser=self.config.get('use_browser', False))
-        if not html:
-            logger.warning(f"[{self.retailer_name}] Could not fetch homepage for promo codes")
-            return []
-        codes = self.find_promo_codes(html)
-        for c in codes:
-            c['source_url'] = url
-        logger.info(f"[{self.retailer_name}] Found {len(codes)} promo code(s)")
+        """
+        Fetch each URL from get_promo_page_urls() and extract promo codes.
+
+        Results across pages are merged and deduplicated by code — if the same
+        code appears on multiple pages, the variant with a discount_percent is
+        preferred (gives the LLM a concrete number to work with).
+        """
+        urls = self.get_promo_page_urls()
+        use_browser = self.config.get('use_browser', False)
+        merged: Dict[str, Dict] = {}
+
+        for url in urls:
+            html = self.fetch_page(url, use_browser=use_browser)
+            if not html:
+                logger.warning(f"[{self.retailer_name}] Could not fetch {url} for promo codes")
+                continue
+            for c in self.find_promo_codes(html):
+                c['source_url'] = url
+                code = c['code']
+                # Keep the variant that found a discount_percent.
+                if code not in merged or (c.get('discount_percent') and not merged[code].get('discount_percent')):
+                    merged[code] = c
+
+        codes = list(merged.values())
+        logger.info(f"[{self.retailer_name}] Found {len(codes)} promo code(s) across {len(urls)} page(s)")
         return codes
 
     # Replica/sort suffixes appended to the base Algolia index name — stripped
