@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { authHeaders } from '@/services/api'
+import { useToast } from '@/components/ui/toast'
 
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
@@ -18,6 +19,7 @@ export function useChatStream({
   const [displayMessages, setDisplayMessages] = useState(initialDisplayMessages)
   const [apiMessages, setApiMessages] = useState(initialApiMessages)
   const [isStreaming, setIsStreaming] = useState(false)
+  const { toast } = useToast()
 
   const insertDivider = useCallback((content) => {
     setDisplayMessages((prev) => [
@@ -69,6 +71,18 @@ export function useChatStream({
         })
 
         if (!res.ok) {
+          if (res.status === 429) {
+            const retryAfter = res.headers.get('Retry-After')
+            const description = retryAfter
+              ? `Too many messages — wait ${retryAfter}s before trying again.`
+              : 'Too many messages — please wait before trying again.'
+            toast({ variant: 'destructive', title: 'Rate limit reached', description })
+            // Roll back the optimistic user + assistant messages so the thread
+            // is clean for retry.
+            setDisplayMessages((prev) => prev.slice(0, -2))
+            setApiMessages(apiMessages)
+            return
+          }
           const errData = await res.json().catch(() => ({}))
           throw new Error(errData.detail || `Request failed (${res.status})`)
         }
@@ -157,7 +171,7 @@ export function useChatStream({
         setDisplayMessages((prev) => updateLast(prev, (m) => ({ ...m, isStreaming: false })))
       }
     },
-    [model, apiMessages, isStreaming]
+    [model, apiMessages, isStreaming, toast]
   )
 
   return { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, insertDivider }
