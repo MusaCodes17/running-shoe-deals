@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -2050,6 +2050,84 @@ fitness card will now show the updated metrics."
 """
 
 
+@mcp.tool()
+def get_deal_alerts() -> dict:
+    """
+    Detect new deal events since the last check and advance the high-water mark.
+
+    Returns a DealAlertDigest covering three alert types:
+      - new_deals: tracked shoes whose price fell below MSRP (or re-qualified)
+        since the last check, sorted by deepest discount first.
+      - price_drops: pre-existing active deals where a subsequent scrape found
+        a lower price than the reference price at the last check, sorted by
+        largest drop amount first. New deals are excluded to avoid double-counting.
+      - replacement_alerts: owned shoes in the retirement pipeline (≥ 75% of
+        mileage_limit) that have new type-matching deals available since the
+        last check (cross-domain bridge via shoe_type heuristic).
+
+    First call ever (no high-water mark in AppSettings) defaults to a 7-day
+    window and sets first_run=True in the response — a reasonable catch-up
+    window without flooding the first report.
+
+    The high-water mark (AppSettings key "last_deal_alert_check_at") is updated
+    on every call; subsequent calls report only incremental events.
+
+    Use this to answer "any new deals since yesterday?" or before presenting
+    the deal_alert_digest prompt for a structured briefing. Read-only with
+    respect to deals — the only write is the settings high-water mark.
+    """
+    with get_session() as db:
+        last_check_str = settings_svc.get_setting(db, "last_deal_alert_check_at")
+        since: Optional[datetime] = None
+        if last_check_str:
+            try:
+                # strip tzinfo — SQLite comparisons need naive datetimes
+                since = datetime.fromisoformat(last_check_str).replace(tzinfo=None)
+            except ValueError:
+                since = None
+
+        digest = deal_alerts_svc.deal_alerts(db, since=since)
+
+        # Advance the high-water mark so next call only reports incremental events
+        settings_svc.set_setting(db, "last_deal_alert_check_at", digest.checked_at)
+        db.commit()
+
+    def _new_deal_to_dict(a) -> dict:
+        return {
+            "deal_id": a.deal_id, "brand": a.brand, "model": a.model,
+            "shoe_type": a.shoe_type, "retailer": a.retailer,
+            "current_price": a.current_price, "msrp": a.msrp,
+            "savings_percent": a.savings_percent, "savings_amount": a.savings_amount,
+            "detected_at": a.detected_at, "product_url": a.product_url,
+        }
+
+    def _drop_to_dict(a) -> dict:
+        return {
+            "deal_id": a.deal_id, "brand": a.brand, "model": a.model,
+            "retailer": a.retailer, "old_price": a.old_price, "new_price": a.new_price,
+            "drop_amount": a.drop_amount, "drop_percent": a.drop_percent,
+            "msrp": a.msrp, "savings_percent": a.savings_percent,
+            "scraped_at": a.scraped_at, "product_url": a.product_url,
+        }
+
+    def _replacement_to_dict(a) -> dict:
+        return {
+            "owned_shoe_id": a.owned_shoe_id, "brand": a.brand, "model": a.model,
+            "nickname": a.nickname, "pct": a.pct, "shoe_type": a.shoe_type,
+            "new_deals": a.new_deals,
+        }
+
+    return {
+        "since": digest.since,
+        "checked_at": digest.checked_at,
+        "first_run": digest.first_run,
+        "has_alerts": digest.has_alerts,
+        "new_deals": [_new_deal_to_dict(a) for a in digest.new_deals],
+        "price_drops": [_drop_to_dict(a) for a in digest.price_drops],
+        "replacement_alerts": [_replacement_to_dict(a) for a in digest.replacement_alerts],
+    }
+
+
 @mcp.prompt()
 def weekly_rotation_summary() -> str:
     """
@@ -2109,4 +2187,67 @@ Else: "No upcoming races scheduled."]
 - delta_km direction: positive means more volume this week (↑), negative means less (↓)
 - Keep the tone informative and direct; no cheerleading ("Great job!" etc.)
 - Do not add observations not grounded in the data (no invented training advice)
+"""
+
+
+@mcp.prompt()
+def deal_alert_digest() -> str:
+    """
+    Generate the deal alert digest — new deals, price drops, and replacement
+    suggestions for shoes in the retirement pipeline, since the last check.
+    Advances the high-water mark so subsequent calls only show incremental alerts.
+    Read-only from the user's perspective (the only write is the settings watermark).
+    """
+    return """# Deal Alert Digest Agent
+
+You are generating the runner's deal alert briefing. This is READ-ONLY —
+no deal writes, no shoe modifications, no confirmation gates.
+
+## Step 1 — Fetch the alert digest
+Call `get_deal_alerts()`. It checks for new deal events since the last run
+and advances the high-water mark automatically. Do not call it more than once.
+
+## Step 2 — Present the digest
+Use the structure below. Omit any section whose list is empty.
+
+---
+**Deal Alert Digest**
+_Since: [since if not null, else "last 7 days (first run)"] · Checked: [checked_at]_
+
+### New Deals ([count])
+[For each entry in new_deals, sorted by savings_percent descending:]
+- **[brand] [model]** ([shoe_type or "—"]) — $[current_price] @ [retailer]
+  [savings_percent rounded to 0dp]% off MSRP ($[msrp]) · saves $[savings_amount rounded to 2dp]
+  [product_url]
+
+### Price Drops ([count])
+[For each entry in price_drops, sorted by drop_amount descending:]
+- **[brand] [model]** @ [retailer] — $[old_price] → $[new_price] (↓ $[drop_amount rounded to 2dp] / [drop_percent rounded to 0dp]%)
+  Now [savings_percent rounded to 0dp]% off MSRP ($[msrp])
+  [product_url]
+
+### Replacement Suggestions ([count])
+[For each entry in replacement_alerts:]
+- **[brand] [model]**[" ([nickname])" if nickname] — [pct×100 rounded to 0dp]% of mileage limit
+  Type: [shoe_type] · [count of new_deals] new deal(s) available:
+  [For each deal in new_deals:
+    – [deal.brand] [deal.model] @ [deal.retailer] — $[deal.current_price] ([deal.savings_percent rounded to 0dp]% off)
+      [deal.product_url]]
+
+[If has_alerts is False:]
+No new deal events since [since if set, else "the last 7 days"]. All quiet.
+---
+
+## Rules
+- Never invent deal data not present in the get_deal_alerts response
+- If first_run is True, note in the header that this is the first check
+  (7-day default window applied)
+- pct display: multiply by 100 and round to the nearest whole number
+  (e.g. 0.834 → 83%)
+- savings_percent / drop_percent: round to nearest whole number
+- savings_amount / drop_amount / prices: format to 2 decimal places
+- Replacement alerts bridge the deals and rotation domains via shoe_type —
+  the runner still needs to decide whether to buy; do not recommend
+- Keep the tone direct and concise; include the product_url for every deal
+  so the runner can click through immediately
 """
