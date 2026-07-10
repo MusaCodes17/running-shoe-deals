@@ -5,6 +5,26 @@
 
 ---
 
+## R4.2 — Scrape Reliability — 2026-07-10
+
+**[CHANGED] `base_scraper._fetch_with_requests` + `services/scrape_history` + `mcp_server.scrape_health` docstring + 10 new tests. No schema changes. Suite 313 → 323 (322 passing; 1 pre-existing env-leak failure in `test_schedule.py::test_get_status_disabled_by_default` — `SCRAPE_SCHEDULE_CRON` set in local dev env, unrelated to this work). Three `r4:` commits.**
+
+- **[CHANGED] `backend/app/scrapers/base_scraper.py` (T1 — per-request retry):** `_fetch_with_requests` now makes up to `_RETRY_ATTEMPTS=2` additional attempts (3 total) on `requests.RequestException` (timeout, connection reset, 5xx from `raise_for_status`). Each retry logs at WARNING; only the final exhausted failure logs at ERROR. `_RETRY_DELAY_S=2` between attempts also serves as inter-attempt politeness. Rate-limit `time.sleep(2)` remains after each successful response. Algolia's `_do_algolia_request` (which has its own auth-error recovery path) is unchanged.
+
+- **[CHANGED] `backend/app/services/scrape_history.py` (T2 — watchdog):** Added `_WATCHDOG_THRESHOLD=3` constant and `_derive_watchdog_alert(trend)` function — returns `(True, reason_str)` when the last 3 *completed* runs (status != "running") are all failures (either `status=="error"` or `products_found==0` warning). Each `retailer_health()` entry now includes `watchdog_alert: bool` and `watchdog_reason: str|None`. The `scrape_health()` aggregate now returns a top-level `retailers_needing_attention: [{name, reason}]` list so Claude can spot trouble at a glance without iterating every retailer entry. Running runs are excluded from the streak so an in-flight scrape never masks a pre-existing failure streak.
+
+- **[CHANGED] `mcp_server.scrape_health` docstring (T3):** Updated to document `watchdog_alert`, `watchdog_reason`, and `retailers_needing_attention` so Claude knows the fields exist and what they mean without having to discover them by inspection.
+
+- **[ADDED] `backend/tests/test_scrape_history.py` — 6 new watchdog tests (T3):** `test_watchdog_fires_after_n_consecutive_errors`, `test_watchdog_fires_on_mixed_error_and_warning`, `test_watchdog_no_fire_when_success_in_streak`, `test_watchdog_no_fire_below_threshold`, `test_watchdog_skips_running_run`, `test_retailers_needing_attention_in_summary`.
+
+- **[ADDED] `backend/tests/test_scraper_retry.py` — 4 new retry tests (T3):** `test_success_on_first_attempt`, `test_retries_on_failure_and_succeeds`, `test_exhausts_retries_and_returns_none`, `test_http_error_status_also_retried`. Uses `unittest.mock` to patch `session.get` and `time.sleep`; no live network calls.
+
+**Implementation note — R4.5 sidestepped R3.5:** The roadmap listed R4.5 (Scraper watchdog) as "blocked on R3.5 (notification channel)". We sidestepped the block by surfacing alerts through the existing `scrape_health` MCP tool (`retailers_needing_attention` field) rather than a push channel — pull-based alerting via the MCP tool is sufficient for the single-user, Claude-Desktop-mediated workflow. R3.5 deferral stands; the watchdog is shipped.
+
+**[VERIFIED]** Suite **322 passing** (`backend/venv/bin/pytest tests/ -q` — 323 collected, 1 pre-existing failure unrelated to this work). No schema changes; no migration. No UI changes; `vite build` not required. `scrape_health` MCP tool response shape confirmed correct by inspection (new fields added to existing dict, no breaking change).
+
+---
+
 ## R4.4 — Coupon Hunting Agent — 2026-07-10
 
 **[ADDED] `get_promo_page_urls` hook on `BaseScraper` + `services/coupon_hunter.py` + `get_coupon_opportunities` MCP tool + `hunt_coupons` MCP tool + `coupon_digest` MCP prompt + 8 tests. No schema changes. Suite 307 → 313 (+8, with minor prior-count drift). Three `r4:` commits.**
