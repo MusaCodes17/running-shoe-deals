@@ -5,6 +5,30 @@
 
 ---
 
+## R3.3 — Shoe review pipeline maturation — 2026-07-10
+
+**[ADDED] `review_draft` column on `owned_shoes` + `rotation.store_shoe_review()` + `PATCH /api/owned-shoes/{id}/review` + `save_shoe_review` MCP tool + `shoes://review/{id}` MCP resource + retirement nudge. Migration `a2b3c4d5e6f7`. Suite 275 → 282 (+7). One `r3:` commit.**
+
+- **[ADDED] Migration `a2b3c4d5e6f7_owned_shoe_review_draft.py`:** Purely additive nullable `Text` column `review_draft` on `owned_shoes`. Reversible downgrade drops the column. No data moved; E4 ceremony not required. Alembic head confirmed at `a2b3c4d5e6f7` post-upgrade.
+
+- **[ADDED] `rotation.store_shoe_review(db, owned_shoe_id, review_text)`:** Single write path for review drafts — raises `LookupError` for a missing shoe, overwrites any previous draft (one review per shoe), commits and returns the updated `OwnedShoe`. Placed after `add_note` in `rotation.py` to stay near the journal-entry family.
+
+- **[ADDED] `PATCH /api/owned-shoes/{id}/review`:** Thin REST adapter over `store_shoe_review`. Body: `ShoeReviewUpdate(review_text: str, min_length=1)` (422 on empty string). Returns `OwnedShoeResponse` with the new `review_draft` field. `OwnedShoeResponse` now includes `review_draft: Optional[str]` so `GET /api/owned-shoes/{id}` also exposes the stored draft without a separate endpoint.
+
+- **[CHANGED] `draft_shoe_review` MCP tool:** After a successful `create_message` sampling call, auto-saves the generated text via `rotation.store_shoe_review` (second `get_session()` call). Response now includes `"saved": True` and a note directing the runner to `save_shoe_review` if they edit the draft in the client. Sampling failure path unchanged.
+
+- **[ADDED] `save_shoe_review(owned_shoe_id, review_text)` MCP tool:** Lets the runner persist a manually-edited version of the draft after reading the sampling output. Guards against empty text. Returns `{"success": True, "shoe": "...", "review_stored": True}`. Placed immediately after `draft_shoe_review` in `mcp_server.py`.
+
+- **[CHANGED] `retire_shoe` MCP tool:** After retiring, counts the shoe's `ShoeNote` rows; if `note_count > 0`, appends `"review_prompt"` to the success response nudging `draft_shoe_review({owned_shoe_id})` while the experience is fresh. No new MCP write — purely advisory.
+
+- **[ADDED] `shoes://review/{shoe_id}` MCP resource:** Returns the stored `review_draft` as a simple Markdown heading + text, or a "no review yet" message with a hint about note count and how to start the workflow. Exportable via `@shoes://review/{id}` in any MCP client. Placed after the `shoes://owned/{id}/notes` resource in `mcp_server.py`.
+
+- **[ADDED] `backend/tests/test_shoe_review.py`:** 9 tests across service and router layers: `store_shoe_review` persists text; `review_draft` null by default; overwrite semantics; `LookupError` on missing shoe; long text accepted; router `update_shoe_review` stores and returns; router 404 propagation; `get_owned_shoe` exposes review_draft when set and when null. Follows the existing call-router-functions-directly pattern.
+
+**[VERIFIED]** Suite **282 passing** (`venv/bin/pytest tests/ -q`). 7 new tests — all green on first run. No UI changes; `vite build` not required. Migration applied (`alembic current` confirmed `a2b3c4d5e6f7 (head)`). Schema change is purely additive — existing shoes have `review_draft=NULL` until the workflow runs.
+
+---
+
 ## R3.2 — Deal Alert Agent — 2026-07-10
 
 **[ADDED] `services/deal_alerts.py` + 22 tests + `get_deal_alerts` MCP tool + `deal_alert_digest` MCP prompt. No schema changes. Suite 251 → 275 (+22 new + 2 previously missing reappeared). Two `r3.2:` commits.**
