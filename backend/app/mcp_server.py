@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -94,31 +94,15 @@ def get_deals(
         limit: Max number of deals to return (default 20, capped at 100).
     """
     limit = max(1, min(limit, 100))
-
     with get_session() as db:
-        query = db.query(Deal).filter(Deal.is_active == True)
-        if min_savings_percent is not None:
-            query = query.filter(Deal.savings_percent >= min_savings_percent)
-        needs_shoe_join = brand or shoe_type
-        if needs_shoe_join:
-            query = query.join(Deal.shoe)
-            if brand:
-                query = query.filter(Shoe.brand.ilike(f"%{brand}%"))
-            if shoe_type:
-                query = query.filter(Shoe.shoe_type == shoe_type)
-        query = query.order_by(desc(Deal.savings_percent))
-
-        if size:
-            # sizes_available is a JSON list column — there's no portable
-            # SQLite "contains" filter for it, so overfetch and filter in
-            # Python (same approach the Deals page uses client-side).
-            deals = [
-                d for d in query.limit(limit * 5).all()
-                if size in (d.sizes_available or [])
-            ][:limit]
-        else:
-            deals = query.limit(limit).all()
-
+        deals = deals_svc.list_deals(
+            db,
+            min_savings_percent=min_savings_percent,
+            brand=brand,
+            shoe_type=shoe_type,
+            size=size,
+            limit=limit,
+        )
         return [_deal_to_dict(d) for d in deals]
 
 
@@ -134,17 +118,7 @@ def get_shoe_deals(brand: str, model: str) -> List[dict]:
         model: Shoe model, e.g. "Adizero Adios Pro 4" (case-insensitive substring match).
     """
     with get_session() as db:
-        deals = (
-            db.query(Deal)
-            .join(Deal.shoe)
-            .filter(
-                Deal.is_active == True,
-                Shoe.brand.ilike(f"%{brand}%"),
-                Shoe.model.ilike(f"%{model}%"),
-            )
-            .order_by(desc(Deal.savings_percent))
-            .all()
-        )
+        deals = deals_svc.list_deals(db, brand=brand, model=model)
         return [_deal_to_dict(d) for d in deals]
 
 
