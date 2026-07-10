@@ -1,7 +1,27 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-07-09
+**Last Updated:** 2026-07-10
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Debt sweep — fat router extraction + chat 429 toast — 2026-07-10
+
+**[CHANGED] Extracted `services/deals.py` and `services/dashboard.py` from the two remaining fat routers; Son of Anton now shows a descriptive toast on chat rate-limit. No schema changes. Suite stable at 231 passing. Three `debt:` commits.**
+
+- **[CHANGED] `backend/app/services/deals.py` (new):** All five deal-query functions extracted from `routers/deals.py` — `list_deals` (is_active / min_savings_percent / brand / model / shoe_type / size / skip / limit), `get_deal`, `deactivate_deal` (raises `LookupError`), `get_deals_for_shoe`, `get_deals_for_retailer`. `list_deals` covers all filter combinations previously split across the router and the MCP tools, including the in-Python `size` filter (SQLite JSON contains, same approach as the Deals page client-side filter). `deactivate_deal` raises `LookupError` on missing ID (router maps → 404 per error-handling convention).
+
+- **[CHANGED] `backend/app/routers/deals.py`:** Thinned to a pure adapter — 5 endpoints, each a 1–3 line delegation to `deals_svc.*`, with `LookupError → HTTPException(404)` translation. All Pydantic `response_model` annotations unchanged; response shapes are byte-identical.
+
+- **[CHANGED] `backend/app/mcp_server.py`:** `get_deals` and `get_shoe_deals` MCP tools now call `deals_svc.list_deals` instead of issuing their own ORM queries. Eliminates the query duplication between router and MCP (REST/MCP parity, architecture §4.2). `_deal_to_dict` stays in `mcp_server.py` (MCP-specific serialisation concern). Import: `from app.services import ... deals as deals_svc` added to the existing import line.
+
+- **[CHANGED] `backend/app/services/dashboard.py` (new):** `get_stats` (returns `DashboardStats`), `get_recent_deals` (list of `Deal`), `get_best_deals` (list of `Deal`) extracted from `routers/dashboard.py`. Docstring notes that the `/api/dashboard/*` endpoints are legacy surfaces from the pre-redesign era — `SettingsSync.jsx` uses `/dashboard/stats`; the other two remain available for tooling use.
+
+- **[CHANGED] `backend/app/routers/dashboard.py`:** Thinned to a pure adapter — 3 endpoints. `get_stats` delegates entirely to `dashboard_svc.get_stats`. `get_recent_deals` and `get_best_deals` delegate query to the service, then build the existing dict shape for the response (presentation logic only, no ORM access in the router).
+
+- **[CHANGED] `frontend/src/hooks/useChatStream.js`:** When `POST /api/chat/message` returns 429, the hook now shows a `destructive` toast via `useToast` with the message "Rate limit reached" and a description that includes `Retry-After` seconds from the response header if present. The optimistic user + assistant placeholder messages are rolled back (`setDisplayMessages(prev => prev.slice(0, -2))`, `setApiMessages(apiMessages)`) so the thread is clean for retry. Previously the rate-limit hit appeared as an opaque inline "Error: Request failed (429)" in the assistant slot. Both ChatPage and ChatDrawer use `useChatStream`, so both surfaces get the fix.
+
+**[VERIFIED]** Suite **231 passing** (`backend/venv/bin/pytest tests/ -q`; existing `test_http_smoke.py` tests for `GET /api/deals/` and `GET /api/dashboard/stats` passed without change — behavior contract held). `vite build` clean, 0 console errors. Desktop + ~380 px visual pass for the 429 toast path (toast appears in bottom-right, thread stays clean; tested via ChatDrawer). No schema changes; no migration.
 
 ---
 
