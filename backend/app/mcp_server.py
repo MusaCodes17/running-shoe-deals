@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -120,6 +120,29 @@ def get_shoe_deals(brand: str, model: str) -> List[dict]:
     with get_session() as db:
         deals = deals_svc.list_deals(db, brand=brand, model=model)
         return [_deal_to_dict(d) for d in deals]
+
+
+@mcp.tool()
+def get_watchlist() -> List[dict]:
+    """
+    List every tracked shoe with its current deal status, best-ever price,
+    and last-seen prices per retailer.
+
+    Use this to answer "what am I watching?", "what's the best price ever
+    on X?", "which tracked shoes are currently on sale?", or to look up
+    a shoe_id before calling trigger_scrape. On-sale shoes sort first
+    (deepest discount first), then the rest alphabetically by brand/model.
+
+    Each entry includes:
+    - shoe_id, brand, model, shoe_type, msrp, target_price
+    - on_sale: True if there's at least one active deal below MSRP
+    - best_deal: the current lowest active deal price with savings %, or null
+    - best_ever_price / best_ever_at: historical best price across all scrapes
+    - last_seen: most recent scraped price per retailer (cheapest first)
+    """
+    with get_session() as db:
+        entries = watchlist_svc.build_watchlist(db)
+        return [_watchlist_entry_to_dict(e) for e in entries]
 
 
 @mcp.tool()
@@ -372,6 +395,43 @@ def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
             }
             for r in records
         ]
+
+
+def _watchlist_entry_to_dict(entry) -> dict:
+    return {
+        "shoe_id": entry.shoe_id,
+        "brand": entry.brand,
+        "model": entry.model,
+        "shoe_type": entry.shoe_type,
+        "msrp": entry.msrp,
+        "target_price": entry.target_price,
+        "image_url": entry.image_url,
+        "on_sale": entry.on_sale,
+        "best_deal": (
+            {
+                "deal_id": entry.best_deal.deal_id,
+                "retailer_name": entry.best_deal.retailer_name,
+                "current_price": entry.best_deal.current_price,
+                "savings_percent": entry.best_deal.savings_percent,
+                "savings_amount": entry.best_deal.savings_amount,
+                "product_url": entry.best_deal.product_url,
+                "in_stock": entry.best_deal.in_stock,
+            }
+            if entry.best_deal else None
+        ),
+        "best_ever_price": entry.best_ever_price,
+        "best_ever_at": entry.best_ever_at.isoformat() if entry.best_ever_at else None,
+        "last_seen": [
+            {
+                "retailer_name": ls.retailer_name,
+                "price": ls.price,
+                "in_stock": ls.in_stock,
+                "product_url": ls.product_url,
+                "scraped_at": ls.scraped_at.isoformat() if ls.scraped_at else None,
+            }
+            for ls in entry.last_seen
+        ],
+    }
 
 
 def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats=None) -> dict:
@@ -1287,6 +1347,62 @@ def active_deals_resource() -> str:
 
 
 @mcp.resource(
+    "deals://watchlist",
+    name="Deals Watchlist",
+    description="All tracked shoes — on-sale first with savings, then watching with best-ever price",
+    mime_type="application/json",
+)
+def deals_watchlist_resource() -> str:
+    """Full watchlist for chat pre-priming: on-sale shoes first, watching shoes second."""
+    import json
+
+    with get_session() as db:
+        entries = watchlist_svc.build_watchlist(db)
+
+    on_sale = [e for e in entries if e.on_sale]
+    watching = [e for e in entries if not e.on_sale]
+
+    md_lines = [f"# Deals Watchlist ({len(entries)} shoes tracked)", ""]
+
+    if on_sale:
+        md_lines += [
+            f"## On Sale Now ({len(on_sale)})",
+            "",
+            "| Shoe | Type | Best Price | Savings | Best Ever |",
+            "|------|------|-----------|---------|-----------|",
+        ]
+        for e in on_sale:
+            name = f"{e.brand} {e.model}"
+            type_tag = e.shoe_type or "—"
+            if e.best_deal:
+                price = f"${e.best_deal.current_price:.2f} @ {e.best_deal.retailer_name}"
+                savings = f"{round(e.best_deal.savings_percent)}% off"
+            else:
+                price = savings = "—"
+            best_ever = f"${e.best_ever_price:.2f}" if e.best_ever_price else "—"
+            md_lines.append(f"| {name} | {type_tag} | {price} | {savings} | {best_ever} |")
+
+    if watching:
+        md_lines += [
+            "",
+            f"## Watching ({len(watching)})",
+            "",
+            "| Shoe | Type | MSRP | Best Ever |",
+            "|------|------|------|-----------|",
+        ]
+        for e in watching:
+            name = f"{e.brand} {e.model}"
+            type_tag = e.shoe_type or "—"
+            msrp = f"${e.msrp:.2f}" if e.msrp else "—"
+            best_ever = f"${e.best_ever_price:.2f}" if e.best_ever_price else "—"
+            md_lines.append(f"| {name} | {type_tag} | {msrp} | {best_ever} |")
+
+    markdown = "\n".join(md_lines)
+    payload = json.dumps({"entries": [_watchlist_entry_to_dict(e) for e in entries]}, default=str)
+    return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
     "shoes://retailers",
     name="Retailers",
     description="Active retailers being scraped with last scraped timestamp and scraping status",
@@ -1617,6 +1733,117 @@ def strava_runs_by_month_resource(year: str, month: str) -> str:
             default=str,
         )
         return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "training://summary",
+    name="Training Summary",
+    description="Last 12 weeks of training volume, pace, HR, and elevation — for chat pre-priming",
+    mime_type="application/json",
+)
+def training_summary_resource() -> str:
+    """Last 12 weeks of weekly training data for chat pre-priming."""
+    import json
+    from datetime import date as _date, timedelta
+
+    today = _date.today()
+    date_from = today - timedelta(weeks=12)
+
+    with get_session() as db:
+        buckets = strava_stats.training_summary(db, period="weekly", date_from=date_from)
+
+    md_lines = [
+        "# Training Summary (last 12 weeks)",
+        "",
+        "| Week | Distance | Runs | Avg Pace | Avg HR | Elevation |",
+        "|------|----------|------|----------|--------|-----------|",
+    ]
+    for b in buckets:
+        pace = b.avg_pace or "—"
+        hr = f"{b.avg_hr}bpm" if b.avg_hr else "—"
+        elev = f"{round(b.elevation_gain_m)}m" if b.elevation_gain_m else "—"
+        md_lines.append(f"| {b.period} | {b.total_km:.1f}km | {b.run_count} | {pace} | {hr} | {elev} |")
+
+    if not buckets:
+        md_lines.append("_No runs in the last 12 weeks._")
+
+    markdown = "\n".join(md_lines)
+    payload = json.dumps(
+        {
+            "period": "weekly",
+            "date_from": date_from.isoformat(),
+            "date_to": today.isoformat(),
+            "buckets": [
+                {
+                    "period": b.period,
+                    "total_km": b.total_km,
+                    "run_count": b.run_count,
+                    "avg_pace": b.avg_pace,
+                    "avg_hr": b.avg_hr,
+                    "elevation_gain_m": b.elevation_gain_m,
+                }
+                for b in buckets
+            ],
+        },
+        default=str,
+    )
+    return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "training://fitness",
+    name="Fitness Metrics",
+    description="Latest COROS athlete fitness snapshot: VO2 max, threshold pace, race predictions, running level",
+    mime_type="application/json",
+)
+def training_fitness_resource() -> str:
+    """Latest athlete fitness snapshot from COROS, for chat pre-priming alongside training://summary."""
+    import json
+
+    with get_session() as db:
+        snap = fitness_svc.latest(db)
+
+    if snap is None:
+        no_data = "# Fitness Metrics\n\n_No fitness data recorded yet. Use the `sync_fitness` prompt to fetch metrics from COROS._"
+        return f"{no_data}\n\n```json\n{{\"has_data\": false}}\n```"
+
+    threshold_pace = rotation.seconds_to_pace(snap.threshold_pace_s_per_km) if snap.threshold_pace_s_per_km else None
+    captured = snap.captured_at.strftime("%Y-%m-%d") if snap.captured_at else "—"
+
+    md_lines = [f"# Fitness Metrics (as of {captured})", ""]
+    if snap.vo2max is not None:
+        md_lines.append(f"**VO2 Max:** {snap.vo2max:.1f} ml/kg/min")
+    if threshold_pace:
+        md_lines.append(f"**Threshold pace:** {threshold_pace}")
+    if snap.running_level is not None:
+        md_lines.append(f"**Running level:** {snap.running_level:.1f}")
+
+    if snap.race_predictions:
+        distance_labels = {
+            "5.0": "5k", "10.0": "10k", "21.0975": "Half marathon", "42.195": "Marathon"
+        }
+        md_lines += ["", "**Race predictions:**", "| Distance | Predicted |", "|----------|-----------|"]
+        for dist_str, seconds in sorted(snap.race_predictions.items(), key=lambda x: float(x[0])):
+            label = distance_labels.get(dist_str, f"{dist_str} km")
+            h, rem = divmod(int(seconds), 3600)
+            m, s = divmod(rem, 60)
+            time_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+            md_lines.append(f"| {label} | {time_str} |")
+
+    markdown = "\n".join(md_lines)
+    payload = json.dumps(
+        {
+            "has_data": True,
+            "captured_at": snap.captured_at.isoformat() if snap.captured_at else None,
+            "vo2max": snap.vo2max,
+            "threshold_pace_s_per_km": snap.threshold_pace_s_per_km,
+            "threshold_pace": threshold_pace,
+            "running_level": snap.running_level,
+            "race_predictions": snap.race_predictions,
+        },
+        default=str,
+    )
+    return f"{markdown}\n\n```json\n{payload}\n```"
 
 
 # ---------------------------------------------------------------------------
