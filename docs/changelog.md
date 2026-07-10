@@ -5,6 +5,28 @@
 
 ---
 
+## R3.2 — Deal Alert Agent — 2026-07-10
+
+**[ADDED] `services/deal_alerts.py` + 22 tests + `get_deal_alerts` MCP tool + `deal_alert_digest` MCP prompt. No schema changes. Suite 251 → 275 (+22 new + 2 previously missing reappeared). Two `r3.2:` commits.**
+
+- **[ADDED] `backend/app/services/deal_alerts.py`:** `deal_alerts(db, *, since, _now)` — the main entry point returning a `DealAlertDigest`. Detects three event types since a reference timestamp:
+  1. **`new_deals`** — active deals with `detected_at > effective_since`, sorted deepest discount first. Inactive deals excluded. MSRP required (B9-v2).
+  2. **`price_drops`** — pre-existing active deals (`detected_at <= effective_since`) where the minimum new `PriceRecord` (scraped after `since`) is cheaper than the most recent reference record at or before `since`. Multiple new records per (shoe, retailer) pair collapsed to the minimum price. Sorted by drop amount descending. New deals excluded to prevent double-counting.
+  3. **`replacement_alerts`** — shoes in `rotation.retirement_pipeline(db)` (≥ 75% of `mileage_limit`) with a `shoe_type` set that have new active deals of the same type detected after `since`. Cross-domain bridge via `shoe_type` string heuristic (same join the Home service uses). Deduplicates owned shoes via `seen_owned: set[int]`.
+  When `since=None` (first run), defaults to a `FIRST_RUN_DAYS=7` catch-up window and sets `first_run=True` in the digest. All datetimes are naive UTC throughout — SQLite stores without timezone info; the MCP tool strips tzinfo from the AppSettings ISO string before passing to the service. Service is purely functional — high-water mark ownership stays with the tool layer.
+
+- **[ADDED] `backend/tests/test_deal_alerts.py`:** 22 tests covering all three alert types + first-run behaviour + `has_alerts` flag. Highlights: `new_deal_before_since_excluded`, `inactive_deal_not_in_new_deals`, `new_deals_sorted_by_savings_percent`; `price_drop_detected`, `price_unchanged_no_drop`, `price_increased_no_drop`, `no_reference_record_no_drop`, `new_deal_not_double_counted_as_price_drop`, `multiple_new_records_collapses_to_min`, `price_drops_sorted_by_drop_amount`; `replacement_alert_for_pipeline_shoe`, `no_replacement_alert_when_deal_predates_since`, `no_replacement_alert_below_pipeline_threshold`, `no_replacement_alert_when_owned_shoe_has_no_type`, `replacement_alert_type_must_match`, `no_replacement_alert_when_owned_shoe_has_no_limit`; `test_first_run_uses_7_day_default_window`, `test_first_run_false_when_since_provided`, `has_alerts_false_when_all_sections_empty`, `has_alerts_true_when_new_deal`, `has_alerts_true_when_price_drop`. Fixed clock (`_now=NOW`) throughout.
+
+- **[ADDED] `get_deal_alerts` MCP tool:** Reads `last_deal_alert_check_at` from `AppSettings` (strips tzinfo for naive-datetime comparison), calls `deal_alerts_svc.deal_alerts(db, since=since)`, advances the high-water mark to `digest.checked_at`, commits, and returns the full three-section digest as a structured dict. First call ever (no key in AppSettings) hits the 7-day first-run path. Subsequent calls are incremental. Docstring written for the model: explains the three alert types, the first-run behaviour, that the watermark is advanced on every call, and the read-only posture from the user's perspective.
+
+- **[ADDED] `deal_alert_digest` MCP prompt:** Step-by-step agent for presenting the deal alert briefing. Step 1 calls `get_deal_alerts()` (exactly once). Step 2 formats and presents a three-section digest (New Deals / Price Drops / Replacement Suggestions) using the fixed layout in the prompt — silent sections omitted; formatting rules for pct display, savings rounding, price formatting, and `product_url` inclusion encoded. No writes beyond the watermark (which the tool handles). Read-only from the runner's perspective.
+
+- **[CHANGED] `mcp_server.py` import line:** Added `deal_alerts as deal_alerts_svc` to the existing services import.
+
+**[VERIFIED]** Suite **275 passing** (`backend/venv/bin/pytest --tb=short -q`). The 2-test discrepancy from R3.4 (recorded as 251, project_state cited 253) is resolved — all 275 tests collected and passed. No schema changes; no migration (high-water mark reuses `AppSettings`). No UI changes; `vite build` not required. 22 new tests in `test_deal_alerts.py` — all green on first run.
+
+---
+
 ## R3.4 — MCP watchlist parity + resource expansion — 2026-07-10
 
 **[ADDED] `get_watchlist` MCP tool + `deals://watchlist`, `training://summary`, `training://fitness` resources. No schema changes. Suite stable at 251 passing. One `r3:` commit.**
