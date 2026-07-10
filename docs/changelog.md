@@ -5,6 +5,20 @@
 
 ---
 
+## R3.1 — Weekly Rotation Summary Agent — 2026-07-10
+
+**[ADDED] `services/weekly_summary.py` + `get_weekly_summary` MCP tool + `weekly_rotation_summary` MCP prompt. No schema changes. Suite 231 → 253 (+20 new, +2 previously masked by a transient syntax error). Three `r3:` commits.**
+
+- **[ADDED] `backend/app/services/weekly_summary.py`:** `weekly_summary(db, today)` assembles the runner's weekly rotation digest in one DB session — ISO-week volume vs last week (Monday-anchored, same convention as `home._training_pulse`), per-shoe usage grouped by shoe and sorted km-descending with `shoe_type` enriched via a single `OwnedShoe` query, retirement pipeline (delegates to `rotation.retirement_pipeline` so Home + the digest never disagree), notable runs tagged Race/Parkrun/Intervals/Tempo/Long Run/Track (Easy/Recovery/Workout intentionally excluded — quality sessions only), 100km checkpoint notes created within the ISO week, and the soonest upcoming `PlannedRace`. `today` parameter makes every test clock-independent. Dataclasses: `WeeklyShoeUsage`, `WeeklyNotableRun`, `WeeklyCheckpoint`, `WeeklyPipelineEntry`, `NextRace`, `WeeklySummary`.
+
+- **[ADDED] `get_weekly_summary` MCP tool:** Thin adapter over the service. Returns the full digest as a structured dict (`week`, `volume`, `per_shoe_usage`, `pipeline`, `notable_runs`, `checkpoints_this_week`, `next_race`). Docstring written for the model: explains what each section contains, what tags count as notable, that pipeline is current state (not a delta), and that the tool is read-only. Auto-discovers in Son of Anton over the loopback MCP client.
+
+- **[ADDED] `weekly_rotation_summary` MCP prompt:** Read-only sibling of `sync_coros_runs`. Step 1 calls `get_weekly_summary()`; Step 2 formats and presents the structured digest in a fixed layout (Volume / Shoes used / Retirement pipeline / Notable runs / Checkpoints / Next race). No writes, no confirmation gate — the digest is purely informational. Includes explicit formatting rules: pipeline pct as whole-number %, delta direction with ↑/↓, no cheerleading, never invent data.
+
+**[VERIFIED]** Suite **253 passing** (`python3 -m pytest -q`). 20 new tests in `test_weekly_summary.py` cover: volume this-vs-last-week (including Sunday boundary, unattributed runs, empty weeks); per-shoe grouping + km-descending order + shoe_type enrichment; notable-tag filtering (all 6 NOTABLE_TAGS in; Easy/Recovery/Workout/untagged out); pipeline threshold (exactly 75% included; <75% excluded; no-limit excluded; worst-first ordering); checkpoint detection (this week vs prior week; manual notes excluded); next-race selection (soonest upcoming; completed excluded). No UI changes; no schema changes; no migration.
+
+---
+
 ## Debt sweep — fat router extraction + chat 429 toast — 2026-07-10
 
 **[CHANGED] Extracted `services/deals.py` and `services/dashboard.py` from the two remaining fat routers; Son of Anton now shows a descriptive toast on chat rate-limit. No schema changes. Suite stable at 231 passing. Three `debt:` commits.**
