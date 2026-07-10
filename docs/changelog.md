@@ -5,6 +5,24 @@
 
 ---
 
+## R3.4 — MCP watchlist parity + resource expansion — 2026-07-10
+
+**[ADDED] `get_watchlist` MCP tool + `deals://watchlist`, `training://summary`, `training://fitness` resources. No schema changes. Suite stable at 251 passing. One `r3:` commit.**
+
+- **[ADDED] `get_watchlist` MCP tool:** Thin adapter over `watchlist_svc.build_watchlist(db)` — the same service function backing the REST `GET /api/watchlist` endpoint. Returns every actively-tracked shoe with on-sale status, best active deal (lowest price + savings %), best-ever price across all scrapes, and last-seen price per retailer. On-sale shoes sort first (deepest discount), then watching shoes A–Z. Closes the "Son of Anton can't answer what am I watching?" gap. Docstring written for the model: explains the on-sale/watching split, what `best_ever_price`/`last_seen` mean, and that `shoe_id` here is the tracked-shoe id (distinct from `owned_shoe_id`).
+
+- **[ADDED] `_watchlist_entry_to_dict` helper:** Serialises `WatchlistEntry` / `WatchlistBestDeal` / `WatchlistLastSeen` dataclasses to JSON-safe dicts. Placed alongside the other `_*_to_dict` helpers in `mcp_server.py`.
+
+- **[ADDED] `deals://watchlist` resource:** Markdown table split into "On Sale Now" (price / savings / best-ever) and "Watching" (MSRP / best-ever) sections, followed by a full JSON payload. Intended for `@deals://watchlist` pre-priming in Son of Anton when the runner asks deal questions.
+
+- **[ADDED] `training://summary` resource:** Last 12 weeks of weekly training data (`strava_stats.training_summary(db, period="weekly", date_from=today-84days)`): distance, run count, avg pace, avg HR, elevation per week, newest-first. Markdown table + JSON payload for chat pre-priming alongside fitness.
+
+- **[ADDED] `training://fitness` resource:** Latest `AthleteMetric` snapshot via `fitness_svc.latest(db)`: VO2 max, threshold pace (formatted as M:SS/km), running level, race predictions table. Graceful "no data" state when no snapshot has been recorded yet. For chat pre-priming alongside `training://summary`.
+
+**[VERIFIED]** Suite **251 passing** (`backend/venv/bin/pytest tests/ -q`). No schema changes; no migration. No UI changes; `vite build` not required. Note: the project_state previously recorded 253 — the 2-test discrepancy predates this session (the R3.1 entry cited "+2 previously masked by a transient syntax error"; those 2 appear not to have survived). Suite count is 251 as of this session.
+
+---
+
 ## R3.1 — Weekly Rotation Summary Agent — 2026-07-10
 
 **[ADDED] `services/weekly_summary.py` + `get_weekly_summary` MCP tool + `weekly_rotation_summary` MCP prompt. No schema changes. Suite 231 → 253 (+20 new, +2 previously masked by a transient syntax error). Three `r3:` commits.**
