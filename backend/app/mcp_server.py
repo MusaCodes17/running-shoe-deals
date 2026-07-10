@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -1075,6 +1075,95 @@ def get_planned_races() -> dict:
         return {"races": [races_svc.race_to_dict(r) for r in races]}
 
 
+@mcp.tool()
+def get_weekly_summary() -> dict:
+    """
+    Compile the weekly rotation digest for the current ISO week (Monday–Sunday).
+
+    Returns a structured snapshot covering:
+    - Volume: this week's km vs last week, with the delta.
+    - Per-shoe usage: km and run count for each shoe used this week, most-used first.
+      shoe_type is included so you can contextualise race-shoe vs daily-trainer usage.
+    - Retirement pipeline: all active shoes at ≥ 75% of their mileage limit, worst first,
+      with a count of matching replacement deals.
+    - Notable runs: activities tagged Race, Parkrun, Intervals, Tempo, Long Run, or Track
+      (the quality-session tags) — does NOT include Easy/Recovery/Workout.
+    - Checkpoints: 100km mileage boundaries crossed by any shoe this week.
+    - Next race: the soonest upcoming PlannedRace with days/weeks remaining and target pace.
+
+    Call this before composing the weekly_rotation_summary digest, or to answer
+    "how was my week?" / "what shoes am I using most?". Read-only — no writes.
+    """
+    with get_session() as db:
+        s = weekly_summary_svc.weekly_summary(db)
+        return {
+            "week": {"start": s.week_start, "end": s.week_end},
+            "volume": {
+                "this_week_km": s.this_week_km,
+                "last_week_km": s.last_week_km,
+                "delta_km": s.delta_km,
+            },
+            "per_shoe_usage": [
+                {
+                    "shoe_id": u.shoe_id,
+                    "brand": u.brand,
+                    "model": u.model,
+                    "nickname": u.nickname,
+                    "shoe_type": u.shoe_type,
+                    "km_this_week": u.km_this_week,
+                    "run_count": u.run_count,
+                }
+                for u in s.per_shoe_usage
+            ],
+            "pipeline": [
+                {
+                    "shoe_id": p.shoe_id,
+                    "brand": p.brand,
+                    "model": p.model,
+                    "nickname": p.nickname,
+                    "pct": p.pct,
+                    "current_mileage": p.current_mileage,
+                    "mileage_limit": p.mileage_limit,
+                    "replacement_deals": p.replacement_deals,
+                }
+                for p in s.pipeline
+            ],
+            "notable_runs": [
+                {
+                    "run_date": n.run_date,
+                    "distance_km": n.distance_km,
+                    "avg_pace": n.avg_pace,
+                    "avg_hr": n.avg_hr,
+                    "activity_tag": n.activity_tag,
+                    "name": n.name,
+                    "shoe": n.shoe,
+                }
+                for n in s.notable_runs
+            ],
+            "checkpoints_this_week": [
+                {
+                    "shoe_id": c.shoe_id,
+                    "brand": c.brand,
+                    "model": c.model,
+                    "checkpoint_km": c.checkpoint_km,
+                    "triggered_at": c.triggered_at,
+                }
+                for c in s.checkpoints_this_week
+            ],
+            "next_race": (
+                {
+                    "name": s.next_race.name,
+                    "race_date": s.next_race.race_date,
+                    "days_remaining": s.next_race.days_remaining,
+                    "weeks_remaining": s.next_race.weeks_remaining,
+                    "distance_km": s.next_race.distance_km,
+                    "target_pace": s.next_race.target_pace,
+                }
+                if s.next_race else None
+            ),
+        }
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers (private — used only by resource functions below)
 # ---------------------------------------------------------------------------
@@ -1731,4 +1820,66 @@ fitness card will now show the updated metrics."
 - Never invent or extrapolate values not present in the COROS response
 - If queryFitnessAssessmentOverview fails or returns no data, say so and stop
 - Keep the tone direct and concise
+"""
+
+
+@mcp.prompt()
+def weekly_rotation_summary() -> str:
+    """
+    Generate the runner's weekly rotation digest — volume vs last week,
+    per-shoe usage, retirement pipeline, notable runs, 100km checkpoints,
+    and next-race countdown. Read-only; no confirmation or writes needed.
+    Typically run on Mondays to review the previous week.
+    """
+    return """# Weekly Rotation Summary
+
+You are composing the runner's weekly training and rotation digest.
+This is READ-ONLY — no writes, no confirmation gates.
+
+## Step 1 — Fetch the weekly snapshot
+Call `get_weekly_summary()`. It returns a single structured object covering
+the current ISO week (Monday through Sunday): volume, per-shoe usage,
+retirement pipeline, notable runs, 100km checkpoints, and next race.
+
+## Step 2 — Compose and present the digest
+Use this exact structure. Omit any section whose data list is empty.
+
+---
+**Week of [week_start] – [week_end]**
+
+**Volume:** [this_week_km] km
+[If last_week_km > 0: "(↑ [delta_km] km vs [last_week_km] km last week)" if delta_km > 0,
+ else "(↓ [|delta_km|] km vs [last_week_km] km last week)" if delta_km < 0,
+ else "(= same as last week's [last_week_km] km)"]
+[If last_week_km == 0 and this_week_km > 0: "(no runs last week)"]
+
+**Shoes used this week:**
+[For each entry in per_shoe_usage, most-used first:]
+- [Brand] [Model][" (nickname)" if nickname] — [km_this_week] km · [run_count] run(s)[" · " + shoe_type if shoe_type]
+
+**Retirement pipeline — [count] shoe(s) at ≥ 75% of limit:**
+[For each entry in pipeline, worst-first:]
+- [Brand] [Model][" (nickname)" if nickname] — [current_mileage] km / [mileage_limit] km ([pct×100 rounded to 0dp]%)[" · " + replacement_deals + " replacement deal(s) available" if replacement_deals > 0]
+
+**Notable runs:**
+[For each entry in notable_runs, newest-first:]
+- [run_date] · [activity_tag] · [distance_km] km @ [avg_pace or —][ · avg_hr bpm if avg_hr set][ · shoe label if shoe set][ · name if name set]
+
+**Checkpoints this week:**
+[For each entry in checkpoints_this_week:]
+- [Brand] [Model] crossed [checkpoint_km] km ([triggered_at])
+
+**Next race:** [If next_race:
+[name] — [race_date] ([days_remaining] day(s) / [weeks_remaining] week(s) away)[", target " + target_pace if target_pace]
+Else: "No upcoming races scheduled."]
+---
+
+## Rules
+- Never invent data not present in get_weekly_summary's response
+- If per_shoe_usage is empty: state "No attributed runs this week"
+- Pipeline pct display: multiply by 100 and round to the nearest whole number
+  (e.g. 0.8234 → 82%) — never show raw fractions
+- delta_km direction: positive means more volume this week (↑), negative means less (↓)
+- Keep the tone informative and direct; no cheerleading ("Great job!" etc.)
+- Do not add observations not grounded in the data (no invented training advice)
 """
