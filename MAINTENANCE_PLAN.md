@@ -80,18 +80,18 @@ E6 deliberately deferred this; the RA milestone makes now the right moment — d
 - DB filename intentionally kept (`~/anton-data/shoe_deals.db` — Litestream replica path keys off it). Repo name + folder + DB filename retained pending R2/R3. E6 amended to "partially superseded" (design_decisions.md; tech_debt 2.4, refactor L4b, project_state, domain_model glossary updated).
 - Acceptance grep clean: remaining `running-shoe-deals` hits are only the retained repo/folder/path names and historical `docs/archive`/`changelog` mentions. Suite 372; `vite build` clean.
 
-**R2 — GitHub rename (you, ~2 min):**
+**R2 — GitHub rename ✅ Done 2026-07-14:** repo renamed to `MusaCodes17/anton`; local remote repointed (`git remote set-url origin git@github.com:MusaCodes17/anton.git`, verified reachable).
 1. GitHub → repo → Settings → rename to `anton` (or `gh repo rename anton` with gh CLI). GitHub auto-redirects the old name for clones/fetches/issues.
 2. Update the local remote anyway (redirects are a crutch): `git remote set-url origin git@github.com:<you>/anton.git`.
 
-**R3 — Local folder rename (you, ~10 min — this is the breaking one):**
+**R3 — Local folder rename ✅ Done 2026-07-14** (folder is now `~/workspace/claude-code/anton`; the `.claude/commands/migrate.md` + `backend/README.md` hardcoded paths were swept to match). **(you, ~10 min — this is the breaking one):**
 1. Quit Claude Desktop and any Claude Code sessions rooted in the repo.
 2. `mv ~/Workspace/claude-code/running-shoe-deals ~/Workspace/claude-code/anton`
 3. **Recreate the venv** (venvs embed absolute paths): `cd anton && rm -rf .venv && python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt`.
 4. Update every absolute path that references the old folder: Claude Desktop MCP config (`claude_desktop_config.json` — the Anton server entry and Filesystem allowed dirs if repo-scoped), any launchd/cron entries, editor workspaces, `frontend` `.env` if it hardcodes paths.
 5. Sanity pass: backend boots (`alembic upgrade head` runs), suite green, SPA builds, Claude Desktop lists Anton tools.
 
-**R4 — Docs:** design_decisions E6 → Superseded (record the rename + what deliberately kept the old name: DB filename); changelog entry; project_state repo-name line.
+**R4 — Docs ✅ Done 2026-07-14:** design_decisions E6 → Superseded (rename recorded; DB filename noted as the one deliberately-kept old name); changelog entry; project_state + domain_model glossary + tech_debt 2.4 + CLAUDE.md/ai_context/architecture repo-name lines all updated.
 
 ---
 

@@ -7,7 +7,7 @@
 
 ## 1. Sixty-Second Summary
 
-Anton (repo name: `running-shoe-deals`) is a **single-user personal running platform**: shoe-deal watching across 8 Canadian retailers + a canonical run/training history + shoe rotation wear tracking, with an embedded AI assistant (Son of Anton) and a full MCP server used by Claude Desktop. FastAPI + SQLite + React SPA, all local, no auth (deliberate, deferred).
+Anton (repo `anton`, renamed from `running-shoe-deals` on 2026-07-14) is a **single-user personal running platform**: shoe-deal watching across 8 Canadian retailers + a canonical run/training history + shoe rotation wear tracking, with an embedded AI assistant (Son of Anton) and a full MCP server used by Claude Desktop. FastAPI + SQLite + React SPA, all local, no auth (deliberate, deferred).
 
 **Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The most recent R4 work: R4.2 Scrape Reliability shipped 2026-07-10 — retry in `BaseScraper._fetch_with_requests` (3 attempts, 2 s backoff) + watchdog (`_WATCHDOG_THRESHOLD=3` consecutive-failure detector, `retailers_needing_attention` in `scrape_health`) + 10 tests; suite 313 → **323** (322 passing). R4.4 Coupon Hunting and R4.1 Scheduled Scraping also shipped same day. **Documentation program** (`docs/archive/documentation_creation.md`) is **complete and committed** (R1.1, 2026-07-06). **All of R2 and RA1.0–RA1.4 (code) and R3.1–R3.4 + R3.6 + R4.1 + R4.2 + R4.4 are shipped.** RA1.5 (cutover) is the next human task; roadmap R4.2 (Agent scheduling) and R4.3 (COROS cadence) remain blocked on R3.5.
 
@@ -96,7 +96,7 @@ Grouped; dates are `docs/changelog.md` entries.
 | Item | State | The missing piece |
 |---|---|---|
 | **Server-side COROS sync** | Code complete (`coros_client`, `coros.py`, REST endpoints), cleanly disabled | COROS won't issue Open-API credentials to individuals. Dormant by decision (design_decisions.md C6); revives only if COROS opens access. |
-| **Anton rebrand** | UI, mark, favicon done; **in-code strings flipped to Anton (R1, 2026-07-14)** — API title, root message, `SYSTEM_PROMPT`, MCP server name, READMEs, `package.json` | Repo name, folder path, DB filename still pre-brand — kept deliberately pending R2/R3 (E6 partially superseded). |
+| **Anton rebrand** | UI, mark, favicon done; **in-code strings flipped to Anton (R1, 2026-07-14)** — API title, root message, `SYSTEM_PROMPT`, MCP server name, READMEs, `package.json`; **GitHub repo + local folder renamed to `anton` (R2/R3, 2026-07-14)** | Only the `shoe_deals.db` filename still pre-brand — kept deliberately (Litestream replica path keys off it; E6). |
 | **P2.3 price-history sparkline** (watchlist rows) | Not built — confirmed by Deals.jsx code read (D5, 2026-07-14) | No price-history chart in the Deals page; consider as I3 improvement if needed. |
 
 ---

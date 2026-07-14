@@ -1,6 +1,6 @@
 # Anton — Architecture Reference
 
-**Repository:** `running-shoe-deals`
+**Repository:** `anton` (renamed from `running-shoe-deals` on 2026-07-14)
 **Document status:** Technical due-diligence audit. First written 2026-07-04; **refreshed 2026-07-04 after the §3 Phase-5 canonical-`activities` migration landed** (revision `c3d4e5f6a7b8`). This document describes the post-migration architecture.
 **Companion:** `docs/dependency_graph.md` (full import-edge audit, coupling and layer-violation analysis).
 **Scope:** Descriptive reference. No implementation changes are proposed here; the final section lists architectural directions only.
@@ -87,7 +87,7 @@ Dev-time coupling: the Vite dev server proxies `/api` to `127.0.0.1:8000` (expli
 ## 3. Folder Structure
 
 ```
-running-shoe-deals/
+anton/
 ├── CLAUDE.md                    # Claude development guide (conventions); the session log is docs/changelog.md
 ├── CLAUDE_DESKTOP_SETUP.md, MAINTENANCE_PLAN.md, REMOTE_ACCESS_PLAN.md   # live root docs (setup · maintenance queue · RA runbook)
 ├── docs/                        # The documentation suite (this file, domain_model, design_decisions, …)

@@ -20,7 +20,7 @@ The repo moves between sessions. Before acting on any time-sensitive claim in th
 
 ## 1. What Anton is
 
-Anton (repo name kept deliberately: `running-shoe-deals` — design_decisions E6) is a **single-user personal running platform** for a competitive marathon runner in Montreal. One FastAPI process + SQLite file + React SPA, all local, no auth (deliberate deferral — E1). Three concerns:
+Anton (repo `anton` — renamed from `running-shoe-deals` on 2026-07-14; design_decisions E6) is a **single-user personal running platform** for a competitive marathon runner in Montreal. One FastAPI process + SQLite file + React SPA, all local, no auth (deliberate deferral — E1). Three concerns:
 
 1. **Deal watching** — a size-less watchlist of shoe models scraped across 8 Canadian retailers; a deal is any price **below the shoe's MSRP** (design_decisions **B9-v2**, 2026-07-06), retired honestly when it stops qualifying or vanishes from search.
 2. **Rotation & training** — a canonical history of every run (`activities` table: 8-year Strava archive + COROS sync + manual logs; 933 activities, ~8,028 km), attribution of runs to owned shoes, a mileage-ledger wear/retirement lifecycle, training analytics, planned races.

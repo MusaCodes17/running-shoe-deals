@@ -15,7 +15,7 @@ macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 ```jsonc
 {
   "mcpServers": {
-    "running-shoe-deals": {
+    "anton": {
       "command": "npx",
       "args": [
         "mcp-remote",

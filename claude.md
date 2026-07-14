@@ -8,7 +8,7 @@
 
 ## 1. Project Overview
 
-Anton (repo: `running-shoe-deals` — old name kept deliberately) is a **single-user personal running platform** for a competitive runner in Montreal:
+Anton (repo `anton`, renamed from `running-shoe-deals` on 2026-07-14) is a **single-user personal running platform** for a competitive runner in Montreal:
 
 - **Deal watching** — track shoe models across 8 Canadian retailers; scrape, qualify, and surface genuine price opportunities.
 - **Rotation & training** — canonical history of every run (`activities` table: Strava archive + COROS sync + manual), attribution of runs to owned shoes, wear/retirement lifecycle, training analytics, planned races.

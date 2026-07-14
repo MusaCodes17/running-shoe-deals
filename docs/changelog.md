@@ -5,6 +5,21 @@
 
 ---
 
+## Rename R2/R3/R4 — GitHub + folder rename to `anton`, downstream sweep — 2026-07-14
+
+**[CHANGED] Completed the rename R1 deferred: the user renamed the GitHub repo (`running-shoe-deals` → `MusaCodes17/anton`) and the local folder (→ `anton`); this pass repointed the git remote and swept every stale downstream reference. Docs/config only — no app code, no schema. One `mx:` commit.**
+
+- **[CHANGED] Git remote repointed:** `origin` was still `…/running-shoe-deals.git` (working only via GitHub's rename redirect) → `git remote set-url origin git@github.com:MusaCodes17/anton.git`; verified reachable with `git ls-remote`.
+- **[FIXED] Broken hardcoded paths** (the folder rename made these point at a non-existent dir): `.claude/commands/migrate.md` `cd …/running-shoe-deals/backend` → `…/anton/backend` (the `/project:migrate` command would have failed); `backend/README.md` project-tree root + `cd` path.
+- **[CHANGED] Docs now stating the repo/folder as `anton`:** `CLAUDE.md` §1 intro, `docs/ai_context.md`, `docs/project_state.md` (§1 intro + rebrand status row), `docs/domain_model.md` glossary, `docs/architecture.md` (Repository line + folder tree), `CLAUDE_DESKTOP_SETUP.md` MCP config key (`running-shoe-deals` → `anton`).
+- **[CHANGED] Decision + debt records:** `design_decisions.md` E6 verdict → **🔁 Superseded — rename executed 2026-07-14** (R1/R2/R3 all done; only `shoe_deals.db` retained); `refactoring/tech_debt.md` §2.4 → **Resolved**; `MAINTENANCE_PLAN.md` §4 R2/R3/R4 marked done.
+
+**Retained by design (unchanged):** the **`shoe_deals.db` filename** — the Litestream replica path and `DATABASE_URL` (`docker-compose.yml`, `deploy/*.sh`) key off it; renaming it is a data-migration risk, not a find-replace (E6). The `mcp_server` tool docstring "list active running shoe deals" is domain description, not a brand string — left. `.claude/worktrees/*` (separate branches) and `docs/archive/*` / prior changelog entries (historical record) left as-is.
+
+**[VERIFIED]** `git remote get-url origin` → `…/anton.git`, reachable; acceptance grep on the main tree — remaining `running-shoe-deals` hits are only the retained `shoe_deals.db` filename, historical `docs/archive`/changelog entries, and separate-branch worktrees. No code/tests touched (suite unchanged at **374**); no build surface changed.
+
+---
+
 ## T5 — deal-domain tests (already covered; +2 gap tests) + ledger fix — 2026-07-14
 
 **[CHANGED] MAINTENANCE_PLAN T5 was stale: its listed gaps shipped 2026-07-08 (`5cb5c56`). Added 2 genuinely-missing orchestrator tests and corrected the ledger. Suite 372 → 374 (+2). One `mx:` commit.**

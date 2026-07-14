@@ -33,7 +33,7 @@ A personal web application to track and find deals on specific running shoes fro
 ## Project Structure
 
 ```
-running-shoe-deals/
+anton/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
@@ -68,7 +68,7 @@ running-shoe-deals/
 
 1. **Clone/Navigate to the project:**
 ```bash
-cd running-shoe-deals/backend
+cd anton/backend
 ```
 
 2. **Create a virtual environment:**

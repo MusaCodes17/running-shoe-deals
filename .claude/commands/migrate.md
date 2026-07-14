@@ -1,4 +1,4 @@
-Run pending database migrations for the running-shoe-deals backend.
+Run pending database migrations for the Anton backend.
 
 Migrations are now managed by **Alembic** (adopted 2026-07-02). The old ad-hoc `migrate_add_*.py` scripts have been moved to `backend/legacy_migrations/` and should not be run.
 
@@ -7,7 +7,7 @@ Migrations are now managed by **Alembic** (adopted 2026-07-02). The old ad-hoc `
 ## Check current migration state
 
 ```bash
-cd /Users/musasouled/workspace/claude-code/running-shoe-deals/backend
+cd /Users/musasouled/workspace/claude-code/anton/backend
 source venv/bin/activate
 alembic current          # shows current revision
 alembic history --verbose  # shows full revision history
@@ -16,7 +16,7 @@ alembic history --verbose  # shows full revision history
 ## Apply pending migrations
 
 ```bash
-cd /Users/musasouled/workspace/claude-code/running-shoe-deals/backend
+cd /Users/musasouled/workspace/claude-code/anton/backend
 source venv/bin/activate
 alembic upgrade head
 ```
