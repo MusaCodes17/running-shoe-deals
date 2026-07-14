@@ -18,7 +18,18 @@
   - `Dockerfile` / `entrypoint.sh` / `litestream.yml` / `docker-compose.yml` / `Caddyfile` / `restore.sh` / `pull-snapshot.sh` internally consistent; `--workers 1` (INV-9) pinned in both Dockerfile CMD and entrypoint's `UVICORN_CMD`.
   - **Minor notes surfaced for the human step (not blockers):** (1) `docker-compose.yml` reads `env_file: ./backend/.env`, while the production template lives at `deploy/.env.production.example` — the intended flow is copy-template → `backend/.env`. (2) `entrypoint.sh` hardcodes `--host 0.0.0.0 --port 8000`, so `API_HOST`/`API_PORT` from the env template are inert in container mode (correct behaviour — Caddy fronts it and the host binds `127.0.0.1:8000` — just noting the dead vars). (3) `ANTON_OAUTH_REDIRECT_URI` / `ANTON_OAUTH_CLIENT_SECRET` remain genuine human-fill items (claude.ai's fixed callback URL, read during the OAuth build).
 
-**[VERIFIED]** No Python/JS changed — suite remains **362 passing** (unrun this session by design; nothing in the test path was touched). RA1.5 itself stays the blocking human task (provision host, deploy, mobile E2E, DC-IP scrape check).
+**[VERIFIED]** No Python/JS changed — suite stays at the post-shoe-sync count of **367** (unrun in the RA1.5-prep step by design; nothing in the test path was touched — see the shoe-sync entry below for the 362 → 367 change). RA1.5 itself stays the blocking human task (provision host, deploy, mobile E2E, DC-IP scrape check).
+
+---
+
+## Per-shoe scrape observability — `scrape_shoe` emits ScrapeRun — 2026-07-14
+
+**[ADDED] Per-shoe / single-shoe scrapes now write `ScrapeRun` rows (`trigger="shoe-sync"`), closing the R2.5 follow-on noted in project_state §11. Suite 362 → 367 (+5). Commit `0935675`.** (Reconciled into the docs 2026-07-14 during RA1.5 prep — the feature shipped without a changelog entry.)
+
+- **[ADDED] `backend/app/scrapers/orchestrator.py` — `scrape_all_shoes` / single-shoe path records one `ScrapeRun` per retailer** at the same grain as full-catalog runs (`trigger="shoe-sync"`, `shoes_scraped=1`), giving visibility into when each shoe was last targeted. Completes the R2.5 instrumentation whose shoe-major grain was a deliberate deferral (see the R2.5 changelog entry: *"Not yet instrumented: the shoe-major synchronous `scrape_all_shoes` … a deliberate follow-on, noted in project_state §11"*).
+- **[CHANGED] `backend/app/services/scrape_history.py` — health/watchdog excludes `shoe-sync` runs.** `retailer_health()`'s `_catalog_filter` (`or_(trigger IS NULL, trigger != 'shoe-sync')`) keeps per-shoe runs out of the "quietly broken" computation: a shoe not stocked at a retailer yields `products_found == 0`, which must not register as a health warning. The filter also covers legacy NULL-trigger rows. Shoe-sync runs still appear in the flat `recent_runs` log so the Sync & Scraping panel shows all scraping activity.
+- **[CHANGED] `backend/app/models/models.py`** — supporting changes for the `trigger` sentinel (27 lines).
+- **[ADDED] `backend/tests/test_scrape_history.py` — 5 new tests:** run-per-retailer, zero-products suppression from health, inclusion in `recent_runs`, and the legacy NULL-trigger coverage.
 
 ---
 
