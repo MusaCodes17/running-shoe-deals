@@ -1,6 +1,7 @@
 """
 Database models using SQLAlchemy ORM
 """
+from datetime import datetime
 from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -77,7 +78,7 @@ class Retailer(Base):
         """Active promo codes only, newest first — used in API responses."""
         return sorted(
             [c for c in self.promo_codes if c.is_active],
-            key=lambda c: c.detected_at or 0,
+            key=lambda c: c.detected_at or datetime.min,
             reverse=True,
         )
 

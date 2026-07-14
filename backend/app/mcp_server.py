@@ -328,10 +328,18 @@ async def trigger_scrape(ctx: Context, shoe_id: Optional[int] = None) -> dict:
             return {"success": False, "error": str(e)}
 
         try:
-            deals_found = sum(r.get("deals_found", 0) for r in results if isinstance(r, dict))
+            # results is always a dict (scrape_shoe → "deals_found";
+            # scrape_all_shoes → "total_deals_found"). The old code iterated
+            # it as a list, which gave string keys — deals_found was always 0.
+            if shoe_id is not None:
+                deals_found = results.get("deals_found", 0)
+                shoes_count = 1
+            else:
+                deals_found = results.get("total_deals_found", 0)
+                shoes_count = results.get("total_shoes", 0)
             await ctx.log(
                 "info",
-                f"Scrape completed: {len(results)} shoe(s) scraped, {deals_found} deal(s) found.",
+                f"Scrape completed: {shoes_count} shoe(s) scraped, {deals_found} deal(s) found.",
                 logger_name="scraper",
             )
         except Exception:

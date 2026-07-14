@@ -50,6 +50,7 @@ _AUTH = {"Authorization": f"Bearer {TEST_SECRET}"}
 
 def test_get_status_disabled_by_default(monkeypatch):
     monkeypatch.delenv("SCRAPE_SCHEDULE_ENABLED", raising=False)
+    monkeypatch.delenv("SCRAPE_SCHEDULE_CRON", raising=False)  # D6: prevent env bleed
     from app.services import schedule as svc
     status = svc.get_status()
     assert status["enabled"] is False

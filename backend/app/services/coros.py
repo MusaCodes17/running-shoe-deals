@@ -36,7 +36,7 @@ def is_already_logged(db: Session, activity_id: str, act_date: str, dist_km: flo
     ).count():
         return True
     return db.query(Activity).filter(
-        Activity.run_date == act_date,
+        Activity.run_date == date.fromisoformat(act_date),
         Activity.distance_km.between(dist_km - 0.1, dist_km + 0.1),
     ).count() > 0
 

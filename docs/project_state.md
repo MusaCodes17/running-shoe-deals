@@ -97,7 +97,7 @@ Grouped; dates are `docs/changelog.md` entries.
 |---|---|---|
 | **Server-side COROS sync** | Code complete (`coros_client`, `coros.py`, REST endpoints), cleanly disabled | COROS won't issue Open-API credentials to individuals. Dormant by decision (design_decisions.md C6); revives only if COROS opens access. |
 | **Anton rebrand** | UI, mark, favicon done | Repo name, API title ("Running Shoe Deal Finder"), DB filename still pre-brand — kept deliberately (E6). |
-| **P2.3 price-history sparkline** (watchlist rows) | Was declared a cut-first stretch goal in Phase 2 | Unverified whether it shipped; treat as *probably not built*. Check `Deals.jsx` before planning. |
+| **P2.3 price-history sparkline** (watchlist rows) | Not built — confirmed by Deals.jsx code read (D5, 2026-07-14) | No price-history chart in the Deals page; consider as I3 improvement if needed. |
 
 ---
 
