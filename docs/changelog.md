@@ -5,6 +5,34 @@
 
 ---
 
+## Defect Block B (D1 + D3/D4 + D5 + D6) — 2026-07-14
+
+**[CHANGED] Data integrity: SQLite FK enforcement on, sanctioned shoe-delete path, small hazard batch. Suite 352 → 362 (+10). Two `mx:` commits.**
+
+- **[CHANGED] `backend/app/database.py` (D1 — FK pragma):** SQLAlchemy event listener registered on the engine that calls `PRAGMA foreign_keys=ON` for every SQLite connection. Previously `PRAGMA foreign_keys` was never set, leaving all FK constraints advisory. Live DB checked with `PRAGMA foreign_key_check` before enabling — no violations. The pragma only applies to the app's `database.py` engine; the test `conftest.py` in-memory fixture uses `create_all` and remains unaffected.
+
+- **[CHANGED] `backend/app/services/rotation.py` (D1 — sanctioned delete path):** Added `delete_owned_shoe(db, owned_shoe_id)`. Handles all FK dependencies in one place: NULLs `PlannedRace.planned_shoe_id` and `StravaGearMapping.owned_shoe_id` (nullable FKs — the parent rows are preserved); deletes all `CheckpointPrompt` records for the shoe (NOT NULL FK, no ORM cascade); deletes `ShoeRun` attributions explicitly first so that `Activity.attribution`'s `cascade="all, delete-orphan"` doesn't race with the shoe's ORM cascade; deletes non-strava `Activity` rows (INV-4: strava archive activities survive); flushes before `db.delete(shoe)` and expires the shoe's runs collection to prevent the shoe's cascade from generating duplicate DELETEs; ORM cascade then handles any remaining `ShoeNote` entries. Raises `LookupError` when the shoe is not found. Also added imports for `CheckpointPrompt`, `PlannedRace`, `StravaGearMapping` to the module-level import.
+
+- **[CHANGED] `backend/app/routers/owned_shoes.py` (D1 — thin adapter):** `DELETE /owned-shoes/{id}` now calls `rotation.delete_owned_shoe()` and maps `LookupError → 404`. Removed the previous raw `db.delete(db_shoe); db.commit()` which bypassed rotation semantics, left orphaned activities, and could not NULL the nullable FK references.
+
+- **[ADDED] `backend/tests/test_delete_owned_shoe.py` — 10 new tests (D1):** `test_delete_owned_shoe_removes_shoe`, `test_delete_owned_shoe_cascades_shoe_note`, `test_delete_owned_shoe_deletes_manual_activity`, `test_delete_owned_shoe_deletes_coros_activity`, `test_delete_owned_shoe_preserves_strava_activity` (INV-4 coverage), `test_delete_owned_shoe_nulls_planned_race_ref` (race row preserved, FK NULLed), `test_delete_owned_shoe_nulls_strava_gear_mapping` (mapping row preserved, FK NULLed), `test_delete_owned_shoe_removes_checkpoint_prompts`, `test_delete_owned_shoe_raises_on_missing`, `test_delete_owned_shoe_does_not_touch_other_shoes`.
+
+- **[CHANGED] `backend/app/mcp_server.py` (D4a — trigger_scrape deal count):** Fixed dict-iteration bug in `trigger_scrape`'s logging: the old code did `sum(r.get("deals_found", 0) for r in results if isinstance(r, dict))` — iterating a dict gives string keys, `isinstance(key, dict)` is always `False`, so `deals_found` was always 0. Now reads directly: `results.get("deals_found", 0)` for a single-shoe scrape; `results.get("total_deals_found", 0)` for scrape-all. `shoes_count` derived from `results.get("total_shoes", 0)` for scrape-all.
+
+- **[CHANGED] `backend/app/services/coros.py` (D4b — is_already_logged date comparison):** `Activity.run_date == act_date` changed to `Activity.run_date == date.fromisoformat(act_date)` in the fallback dedup filter. The raw ISO string comparison works on SQLite (text affinity) but would silently fail on Postgres or any backend with strict column-type matching. Primary dedup (exact `coros_activity_id`) was already correct.
+
+- **[CHANGED] `backend/app/models/models.py` (D4c — promo sort TypeError):** `Retailer.active_promo_codes` property: sort key changed from `lambda c: c.detected_at or 0` to `lambda c: c.detected_at or datetime.min`. Mixing `datetime` and `int` in a sort key raises `TypeError` when `detected_at` is `None` on an uncommitted `PromoCode` row. Added `from datetime import datetime` import.
+
+- **[CHANGED] `backend/tests/test_schedule.py` (D6 — env-leak fix):** `test_get_status_disabled_by_default` now also calls `monkeypatch.delenv("SCRAPE_SCHEDULE_CRON", raising=False)`. Previously only `SCRAPE_SCHEDULE_ENABLED` was cleared; if the local dev env had a non-default `SCRAPE_SCHEDULE_CRON` the assertion `status["cron"] == "0 3 * * *"` failed. Suite was 352/362 green in CI (where `SCRAPE_SCHEDULE_CRON` isn't set); the pre-existing failure only manifested in a local full-suite run with the dev env active.
+
+**D3 status confirmed:** All 13 COROS activities already carry `coros_activity_id` (live DB query `SELECT COUNT(*), SUM(CASE WHEN coros_activity_id IS NULL THEN 1 ELSE 0 END) FROM activities WHERE source='coros'` → `13|0`). Primary dedup tier is functioning; the date + ±0.1 km fallback is backup only. No code fix needed beyond the D4b `date.fromisoformat` change.
+
+**D5 confirmed:** `Deals.jsx` code read confirms `P2.3 price-history sparkline` was never built. `project_state.md §4` updated from "probably not built" to "confirmed not built."
+
+**[VERIFIED]** Suite **362 passing** (`backend/venv/bin/pytest tests/ -q`). +10 tests from `test_delete_owned_shoe.py`. No schema changes; no migration. No UI changes; `vite build` not required.
+
+---
+
 ## Defect Block A (D8 + D7) — 2026-07-14
 
 **[CHANGED] Scraper honesty: sold-out deals retired at qualification time (D8); kids/youth filter extended to URL handles and variant size labels (D7). No schema changes. Suite 323 → 352 (+29). Two `mx:` commits.**
