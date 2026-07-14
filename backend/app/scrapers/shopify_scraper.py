@@ -130,21 +130,27 @@ class ShopifyScraper(BaseScraper):
         # sold-out ones — reading it would create phantom deals for sold-out sale
         # colorways (e.g. $150 sold-out colorway makes the product appear at $150
         # even though every in-stock colorway is $300 full price).
+        #
+        # Youth/children variants (label ends in 'Y' or 'C', e.g. "6Y", "4.5C")
+        # are excluded from BOTH the price pool and sizes_available so a cheap
+        # junior-size markdown can't set the deal price for an adult product (D7b).
         sizes_available = []
         available_prices = []
         for v in data.get('variants', []):
-            vp = v.get('price')
-            vc = v.get('compare_at_price')
-            vp_dollars = round(vp / 100.0, 2) if isinstance(vp, (int, float)) else None
-            vc_dollars = round(vc / 100.0, 2) if isinstance(vc, (int, float)) and vc else None
-            if v.get('available') and vp_dollars is not None:
-                available_prices.append((vp_dollars, vc_dollars))
             if not v.get('available'):
                 continue
             if size_pos:
                 label = v.get(f'option{size_pos}') or ''
             else:
                 label = (v.get('title') or '').split('/')[-1].strip()
+            if self._is_youth_size(label):
+                continue
+            vp = v.get('price')
+            vc = v.get('compare_at_price')
+            vp_dollars = round(vp / 100.0, 2) if isinstance(vp, (int, float)) else None
+            vc_dollars = round(vc / 100.0, 2) if isinstance(vc, (int, float)) and vc else None
+            if vp_dollars is not None:
+                available_prices.append((vp_dollars, vc_dollars))
             size = self.extract_numeric_size(label)
             if size and size not in sizes_available:
                 sizes_available.append(size)
@@ -173,6 +179,18 @@ class ShopifyScraper(BaseScraper):
             'image_url': self._norm_url(data.get('featured_image')),
             'colorway': self._color_from_options(data),
         }
+
+    _YOUTH_SIZE_RE = re.compile(r'^\d+\.?\d*\s*[YCyc]\b')
+
+    @classmethod
+    def _is_youth_size(cls, label: str) -> bool:
+        """True if a size label is a youth/children's size (e.g. '6Y', '4.5C').
+
+        Only matches when the numeric part is immediately followed by Y or C
+        (case-insensitive) with no additional text — avoids false-positives on
+        labels like "Color: Black".
+        """
+        return bool(cls._YOUTH_SIZE_RE.match(label.strip()))
 
     @staticmethod
     def _norm_url(url: Optional[str]) -> Optional[str]:

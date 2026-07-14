@@ -43,11 +43,19 @@ class BaseScraper(ABC):
     )
 
     @classmethod
-    def is_kids_shoe(cls, text: Optional[str]) -> bool:
-        """True if a product name/title/URL looks like a kids/junior listing."""
-        if not text:
-            return False
-        return bool(cls._KIDS_SHOE_RE.search(text))
+    def is_kids_shoe(cls, *texts: Optional[str]) -> bool:
+        """True if ANY of the given strings looks like a kids/junior listing.
+
+        Pass as many fields as are available (name, product_url, product_type,
+        tags) — the check is a union so a listing whose kids-ness lives only
+        in its URL handle or product_type still gets caught even when the title
+        looks adult (D7a fix).
+        """
+        return any(
+            bool(cls._KIDS_SHOE_RE.search(t))
+            for t in texts
+            if t
+        )
 
     def search_products_filtered(self, brand: str, model: str) -> List[Dict]:
         """
@@ -57,9 +65,16 @@ class BaseScraper(ABC):
         filter itself. Callers that persist results to the database
         (ScrapeOrchestrator) should call this instead of search_products()
         directly; dry-run/test paths may use either.
+
+        Checks name AND product_url so Shopify listings whose kids-ness lives
+        in the handle (e.g. '/products/adidas-ultraboost-kids') are caught even
+        when the title looks adult (D7a).
         """
         results = self.search_products(brand, model)
-        filtered = [r for r in results if not self.is_kids_shoe(r.get('name'))]
+        filtered = [
+            r for r in results
+            if not self.is_kids_shoe(r.get('name'), r.get('product_url'))
+        ]
         skipped = len(results) - len(filtered)
         if skipped:
             logger.info(
