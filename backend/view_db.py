@@ -11,7 +11,7 @@ def view_database():
     cursor = conn.cursor()
     
     print("=" * 80)
-    print("RUNNING SHOE DEAL FINDER - DATABASE CONTENTS")
+    print("ANTON - DATABASE CONTENTS")
     print("=" * 80)
     
     # View Shoes

@@ -1,4 +1,4 @@
-# Running Shoe Deal Finder 🏃‍♂️
+# Anton 🏃‍♂️
 
 A personal web application to track and find deals on specific running shoes from trusted Canadian retailers.
 

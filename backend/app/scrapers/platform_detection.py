@@ -37,7 +37,7 @@ def probe_shopify(base_url: str) -> bool:
         resp = requests.get(
             url,
             timeout=8,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; running-shoe-deals platform probe)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; anton platform probe)"},
         )
         if resp.status_code != 200:
             return False

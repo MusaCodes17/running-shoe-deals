@@ -27,7 +27,7 @@ from typing import Any, AsyncGenerator, Callable
 from mcp import types as mcp_types
 from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
 
-SYSTEM_PROMPT = """You are a personal running assistant called Son of Anton, built into the Running Shoe Deal Finder. \
+SYSTEM_PROMPT = """You are a personal running assistant called Son of Anton, built into Anton (the user's personal running platform). \
 You help the user manage their shoe rotation, track mileage, find deals, and make smart decisions about their running gear. \
 You have access to MCP tools to query owned shoes, run history, shoe notes, and current deals. \
 Be concise and direct — the user is a competitive runner, running terminology is fine. \

@@ -96,7 +96,7 @@ Grouped; dates are `docs/changelog.md` entries.
 | Item | State | The missing piece |
 |---|---|---|
 | **Server-side COROS sync** | Code complete (`coros_client`, `coros.py`, REST endpoints), cleanly disabled | COROS won't issue Open-API credentials to individuals. Dormant by decision (design_decisions.md C6); revives only if COROS opens access. |
-| **Anton rebrand** | UI, mark, favicon done | Repo name, API title ("Running Shoe Deal Finder"), DB filename still pre-brand — kept deliberately (E6). |
+| **Anton rebrand** | UI, mark, favicon done; **in-code strings flipped to Anton (R1, 2026-07-14)** — API title, root message, `SYSTEM_PROMPT`, MCP server name, READMEs, `package.json` | Repo name, folder path, DB filename still pre-brand — kept deliberately pending R2/R3 (E6 partially superseded). |
 | **P2.3 price-history sparkline** (watchlist rows) | Not built — confirmed by Deals.jsx code read (D5, 2026-07-14) | No price-history chart in the Deals page; consider as I3 improvement if needed. |
 
 ---

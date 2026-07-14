@@ -65,8 +65,8 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Running Shoe Deal Finder",
-    description="API for finding deals on running shoes from Canadian retailers",
+    title="Anton",
+    description="Anton — personal running platform (deal watching + rotation/training) for Canadian retailers",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -145,7 +145,7 @@ app.mount("/mcp", mcp.streamable_http_app())
 def read_root():
     """Root endpoint - API information"""
     return {
-        "message": "Running Shoe Deal Finder API",
+        "message": "Anton API",
         "version": "1.0.0",
         "docs": "/docs",
         "status": "running"

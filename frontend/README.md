@@ -1,6 +1,6 @@
-# Running Shoe Deal Finder — Frontend
+# Anton — Frontend
 
-React + Vite dashboard for the Running Shoe Deal Finder API (Phase 3).
+React + Vite dashboard for the Anton API (Phase 3).
 
 ## Stack
 

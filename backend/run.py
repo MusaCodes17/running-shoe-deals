@@ -1,5 +1,5 @@
 """
-Run script for the Running Shoe Deal Finder API
+Run script for the Anton API
 Run this from the backend directory: python run.py
 """
 import uvicorn
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     port = int(os.getenv("API_PORT", 8000))
     
     print(f"""
-    🏃‍♂️ Running Shoe Deal Finder API
+    🏃‍♂️ Anton API
     ================================
     Starting server at http://{host}:{port}
     API Documentation: http://localhost:{port}/docs

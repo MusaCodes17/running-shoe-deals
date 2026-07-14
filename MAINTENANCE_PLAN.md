@@ -66,7 +66,7 @@ Ordered by risk to live data / feed honesty.
 |---|---|---|
 | H1 | ✅ **Done 2026-07-13** — `TROUBLESHOOTING.md` + `QUICKSTART.md` archived to `docs/archive/` (actively wrong: pre-Alembic, `seed_data.py`/`run.py` era, delete-the-DB advice). See `docs/archive/README.md`. Commit the move. |
 | H2 | ✅ **Done 2026-07-14** — all 9 completed plans `git mv`-ed to `docs/archive/`. Cross-reference sweep updated every path citation in the living docs (architecture tree + threat-model pointer, ai_context tree + orientation, CLAUDE.md §3, design_decisions E1/E7, roadmap R2.7/R5.6, project_state, `.claude/skills/add-frontend-page`, `.claude/commands/phase`, `REMOTE_ACCESS_PLAN`, `docs/archive/README`). **Deliberately not rewritten** (CLAUDE.md §13, append-only history): `docs/changelog.md` session entries and the dated `docs/documentation_review.md` — those are names, not live navigation. Kept at root: `CLAUDE.md`, `REMOTE_ACCESS_PLAN.md`, `CLAUDE_DESKTOP_SETUP.md`, this file. Sweep verified clean; no code references the moved files; suite 372. |
-| H3 | **Chat SYSTEM_PROMPT still introduces the assistant by the old product name** — the one user-visible pre-brand string (tech_debt §2.4 / refactor.md L4b). Fix with R1 of the rename below. |
+| H3 | ✅ **Done 2026-07-14 (with R1)** — chat `SYSTEM_PROMPT` now says "built into Anton (the user's personal running platform)". The one user-visible pre-brand string is fixed (tech_debt §2.4 / refactor.md L4b struck). |
 | H4 | **Stray root artifacts** — `training-default.png` (gitignored scratch screenshot) and `.DS_Store` files: delete locally at will; nothing to commit. |
 
 ---
@@ -75,9 +75,10 @@ Ordered by risk to live data / feed honesty.
 
 E6 deliberately deferred this; the RA milestone makes now the right moment — do it **before** RA1.5 so the deployed host, image names, and connector URL are born with the final name, or immediately **after** cutover as one atomic pass. Do not do it mid-cutover.
 
-**R1 — In-repo strings (Claude Code session, safe anytime):**
-- FastAPI `title` ("Running Shoe Deal Finder" → "Anton") in `main.py`; OAuth login page title if branded; `docker-compose.yml` service/container names; `deploy/Caddyfile` comments; chat `SYSTEM_PROMPT` (H3); README header; `pyproject`/`package.json` name fields if set. DB filename stays (`~/anton-data/` path is name-neutral; renaming the SQLite file buys nothing and risks the Litestream config — leave it, note in E6's successor entry).
-- `grep -rin "running.shoe.deal\|rundeals" --include="*.py" --include="*.js*" --include="*.html" --include="*.yml" --include="*.md"` must return only historical docs/changelog mentions.
+**R1 — In-repo strings ✅ Done 2026-07-14:**
+- Flipped: FastAPI `title` + root message + `description` (`main.py`), chat `SYSTEM_PROMPT` (H3), COROS-sync agent prompt (`mcp_server.py`), `FastMCP("anton")` server name, platform-probe User-Agent, `backend/README.md` + `frontend/README.md` headers, `frontend/package.json` + `package-lock.json` `name` (→ `anton-frontend`), and the `run.py`/`view_db.py`/`test_scraper.py` banners. Already Anton (no change): OAuth login page (`title`/`h1`), SPA `index.html` `<title>`, `docker-compose.yml` service/image, `deploy/Caddyfile`.
+- DB filename intentionally kept (`~/anton-data/shoe_deals.db` — Litestream replica path keys off it). Repo name + folder + DB filename retained pending R2/R3. E6 amended to "partially superseded" (design_decisions.md; tech_debt 2.4, refactor L4b, project_state, domain_model glossary updated).
+- Acceptance grep clean: remaining `running-shoe-deals` hits are only the retained repo/folder/path names and historical `docs/archive`/`changelog` mentions. Suite 372; `vite build` clean.
 
 **R2 — GitHub rename (you, ~2 min):**
 1. GitHub → repo → Settings → rename to `anton` (or `gh repo rename anton` with gh CLI). GitHub auto-redirects the old name for clones/fetches/issues.

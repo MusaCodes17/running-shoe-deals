@@ -240,7 +240,7 @@ The asymmetry is deliberate and worth stating: **the deal domain forgets on comm
 | **replacement deal** | Active deal on a tracked shoe whose `shoe_type` matches an owned shoe's — the heuristic bridge (4.3). | |
 | **shoe_type** | The runner's category vocabulary — the cross-domain join key. **Backend-owned since R2.4** (`app/utils/shoe_types.py`, served at `GET /api/shoe-types`, validated on write); values enumerated in the §4.3 table. | Was free strings in four unvalidated copies (tech_debt P1-5, the `shoe_type` half now resolved); still treat vocabulary edits as schema-grade — both domains must agree. Owned-shoe `status` remains unvalidated (M2). |
 | **personal best** | Whole-activity best within a distance band (4.12). | Never present as a segment PB. |
-| **Anton** | The platform. **Son of Anton** — the embedded assistant. | Repo/API still carry the pre-rebrand name "running-shoe-deals" / "Running Shoe Deal Finder." |
+| **Anton** | The platform. **Son of Anton** — the embedded assistant. | In-code strings now say "Anton" (R1, 2026-07-14); the **repo name, folder path, and DB filename** still carry "running-shoe-deals" (retained pending R2/R3 — E6). |
 
 ### 7.2 Conventions in the schema and code
 - **Units in names**: `distance_km`, `moving_time_s`, `avg_pace_s_per_km`, `elevation_gain_m`, `mileage_at_note` — a value's unit is in its name; unlabeled numbers are a smell.

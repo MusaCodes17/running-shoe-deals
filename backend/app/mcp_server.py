@@ -31,7 +31,7 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
 # would only be reachable at the doubled-up "/mcp/mcp".
-mcp = FastMCP("running-shoe-deals", streamable_http_path="/")
+mcp = FastMCP("anton", streamable_http_path="/")
 
 
 @contextmanager
@@ -1959,8 +1959,8 @@ def sync_coros_runs(days_back: int = 2) -> str:
     """
     return f"""# COROS Sync Agent
 
-You are acting as a COROS run sync agent for the Running Shoe Deal
-Finder app. Follow this exact process.
+You are acting as a COROS run sync agent for Anton, the user's
+personal running platform. Follow this exact process.
 
 ## Step 1 — Fetch recent runs from COROS
 Call querySportRecords with:

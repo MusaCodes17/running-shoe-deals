@@ -5,6 +5,22 @@
 
 ---
 
+## Rename R1 — in-repo product strings → Anton (+ H3) — 2026-07-14
+
+**[CHANGED] Flipped the in-code product strings from "Running Shoe Deal Finder" / "running-shoe-deals" to "Anton" (MAINTENANCE_PLAN §4 R1; H3). Repo name, folder path, and DB filename deliberately retained (R2/R3, at cutover). Suite 372; `vite build` clean. One `mx:` commit.**
+
+- **[CHANGED] Backend product strings:** `app/main.py` FastAPI `title` ("Running Shoe Deal Finder" → "Anton"), `description`, and root `"message"` ("Anton API"); `mcp_server.py` `FastMCP("running-shoe-deals")` → `FastMCP("anton")` (the connector-visible server name) + the COROS-sync agent prompt ("for Anton, the user's personal running platform"); `scrapers/platform_detection.py` probe User-Agent (`anton platform probe`).
+- **[CHANGED] H3 — chat `SYSTEM_PROMPT` (`services/chat_service.py`):** "built into the Running Shoe Deal Finder" → "built into Anton (the user's personal running platform)". This was the one *user-visible* pre-brand string (refactor.md L4b) — now fixed. `Son of Anton` naming unchanged.
+- **[CHANGED] READMEs + package name:** `backend/README.md` and `frontend/README.md` headers; `frontend/package.json` + `package-lock.json` `name` → `anton-frontend`; dev-script banners in `run.py`/`view_db.py`/`test_scraper.py`.
+- **[UNCHANGED — already Anton]:** OAuth login page (`title`/`h1`), SPA `index.html` `<title>`, `docker-compose.yml` service/image (`anton`/`anton-backend`), `deploy/Caddyfile`.
+- **[CHANGED] Docs reconciliation (reversing part of E6, CLAUDE.md §11):** `design_decisions.md` E6 verdict → **🔁 Partially superseded** (in-repo strings flipped R1; repo/folder/DB filename retained pending R2/R3 — the DB filename is load-bearing for the Litestream replica path); `project_state.md` §4 rebrand row, `domain_model.md` §7.1 glossary, `tech_debt.md` §2.4, and `refactor.md` L4b(b) all updated/struck to reflect the new state.
+
+**Retained by design (R1 scope):** repo name `running-shoe-deals`, the local folder, and `shoe_deals.db` — renamed in R2 (GitHub) / R3 (folder), targeted at/around RA1.5 so the deployed host + connector URL are born with the final name. The `mcp_server` tool docstring "list active running shoe deals" is domain description (deals on running shoes), not a brand string — correctly left.
+
+**[VERIFIED]** Import smoke: `app.title == "Anton"`, `mcp.name == "anton"`, `SYSTEM_PROMPT` updated. No test asserted the old strings; full suite **372 passing**; `vite build` clean. Acceptance grep: remaining `running-shoe-deals` hits are only retained path/repo names + historical `docs/archive`/`changelog`.
+
+---
+
 ## H2 — relocate completed plans to docs/archive/ + citation sweep — 2026-07-14
 
 **[CHANGED] Moved the 9 completed execution plans out of the repo root into `docs/archive/` and updated every path citation in the living docs. Docs-only; suite unchanged at 372. One `mx:` commit.**

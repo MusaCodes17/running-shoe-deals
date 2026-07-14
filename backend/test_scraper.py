@@ -111,7 +111,7 @@ def test_price_parsing():
 
 
 if __name__ == "__main__":
-    print("\n🏃‍♂️ Running Shoe Deal Finder - Scraper Test\n")
+    print("\n🏃‍♂️ Anton - Scraper Test\n")
     
     # Test price parsing first
     test_price_parsing()
