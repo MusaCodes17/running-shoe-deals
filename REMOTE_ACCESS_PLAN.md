@@ -1,6 +1,6 @@
 # Anton — Remote Access & Deployment Plan (RA)
 
-**Written:** 2026-07-09. **Status:** Plan — this document gates RA1 execution, the same role `SECURITY_PASS_PLAN.md` played for R2.1 and `TRAINING_DEPTH_PLAN.md` for R2.7.
+**Written:** 2026-07-09. **Status:** Plan — this document gates RA1 execution, the same role `docs/archive/SECURITY_PASS_PLAN.md` played for R2.1 and `docs/archive/TRAINING_DEPTH_PLAN.md` for R2.7.
 **Roadmap position:** RA sits between R2 (complete) and R3/R4 (**parked 2026-07-09** — see roadmap + changelog). It pulls **R5.2 (remote access story)** forward and executes it.
 **Open items before code:** the D0 hosting decision (§4) and spikes S1–S3 (§5). Everything in §6 is sequenced to start only after those close.
 

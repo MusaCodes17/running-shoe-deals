@@ -1,7 +1,7 @@
 # Anton — AI Context
 
 **Read this first.** This is the orientation document for any AI assistant opening this repository — the index to the documentation suite, not a copy of it. Where detail lives elsewhere, this file gives one sentence and a citation; follow the citation before acting.
-**Generated:** 2026-07-06 (deliverable of documentation prompt 10, `documentation_creation.md`). Reflects the tree as of the **MSRP-drives-deals** change (2026-07-06, migration `d4e5f6a7b8c9`, `models.py` at 18,858 bytes, suite at **64 passing**).
+**Generated:** 2026-07-06 (deliverable of documentation prompt 10, `docs/archive/documentation_creation.md`). Reflects the tree as of the **MSRP-drives-deals** change (2026-07-06, migration `d4e5f6a7b8c9`, `models.py` at 18,858 bytes, suite at **64 passing**).
 **Update cadence:** this file ages fastest of the stable docs — refresh it at the start of every roadmap R-phase (`docs/roadmap.md` R1–R5) and whenever an entry in "Never change casually" or "Current priorities" ships or changes.
 
 ---
@@ -45,8 +45,9 @@ docs/                 the reference suite (this file, architecture, domain_model
 refactoring/          refactor.md (code review) · tech_debt.md (ranked ledger) ·
                       dead_code.md (deletion inventory)
 CLAUDE.md             the coding guide — conventions, patterns, traps, session checklist
-documentation_creation.md   the prompt program that produced docs/ + refactoring/
-REDESIGN_PLAN.md etc. root planning docs — append-only history; code cites them as §N/P3.4
+docs/archive/         retired docs + completed execution plans (REDESIGN_PLAN, REFACTOR_PLAN,
+                      TRAINING_DEPTH_PLAN, SECURITY_PASS_PLAN, documentation_creation, …) — moved
+                      here H2 2026-07-14; append-only history, code cites them as §N/P3.4
 backend/
   run.py              uvicorn entrypoint (binds 127.0.0.1:8000 by default since R2.1; API_HOST=0.0.0.0 opts into LAN — see E7)
   shoe_deals.db       the live DB (+ .bak* restore points, incl. .bak-msrp-drives-deals)
@@ -101,7 +102,7 @@ These are the load-bearing decisions and invariants a well-meaning session is mo
 7. **The FastAPI/Starlette/sse-starlette pin triple** resolves an `mcp[cli]` version conflict. Never bump any of the three independently. (design_decisions A7, CLAUDE.md §6)
 8. **`ShoeRun` proxies are read-only presentation.** They lazy-load (N+1 in loops — eager-load `activity` at list seams) and **silently do not work in `.filter()`** — query `Activity` columns. (dependency_graph §8.2, CLAUDE.md §6, refactor.md H4)
 9. **The `shoe_type` string vocabulary is the cross-domain join key.** Backend-owned since R2.4 (`app/utils/shoe_types.py`, served at `GET /api/shoe-types`, validated on write — off-vocab is a 422; the frontend copy is deleted). Still treat vocabulary edits as schema-grade — both domains must agree on the exact strings. (domain_model §4.3/§7.1; the `shoe_type` half of tech_debt P1-5 is resolved — owned-shoe `status` validation, M2, remains.)
-10. **Auth is a shared bearer token (R2.1 shipped 2026-07-07) — send it, don't widen exposure casually.** Every request to `/api/*` and `/mcp` needs `Authorization: Bearer <ANTON_SECRET>` (app-wide pure-ASGI middleware, `app/middleware/auth.py`); exempt: `/`, `/health`, `/api/health`, OPTIONS. Default bind is `127.0.0.1`; the app fails fast if `ANTON_SECRET` is unset. The SPA (`VITE_ANTON_SECRET`), Claude Desktop (`mcp-remote --header`), and the loopback client all send it. Any *further* reach increase (unattended agents, mobile, remote MCP) still gets weighed. (design_decisions **E7** ← E1; `SECURITY_PASS_PLAN.md`; `CLAUDE_DESKTOP_SETUP.md`; architecture §11)
+10. **Auth is a shared bearer token (R2.1 shipped 2026-07-07) — send it, don't widen exposure casually.** Every request to `/api/*` and `/mcp` needs `Authorization: Bearer <ANTON_SECRET>` (app-wide pure-ASGI middleware, `app/middleware/auth.py`); exempt: `/`, `/health`, `/api/health`, OPTIONS. Default bind is `127.0.0.1`; the app fails fast if `ANTON_SECRET` is unset. The SPA (`VITE_ANTON_SECRET`), Claude Desktop (`mcp-remote --header`), and the loopback client all send it. Any *further* reach increase (unattended agents, mobile, remote MCP) still gets weighed. (design_decisions **E7** ← E1; `docs/archive/SECURITY_PASS_PLAN.md`; `CLAUDE_DESKTOP_SETUP.md`; architecture §11)
 11. **`MCP_SERVER_URL` is a self-reference.** It points back at this same process; changing bind/port silently degrades Son of Anton to "no tools." (dependency_graph §8.1)
 12. **The scrape lock's posture is refuse, not queue** — and it assumes exactly one process/worker. Don't wire APScheduler or add workers without reading D4/D5/E5 and roadmap R4.1. (design_decisions D4)
 13. **Migrations that move data follow the E4 bar** — reversible downgrade, named `.bak` backup, pre/post reconciliation recorded in the changelog. `c3d4e5f6a7b8` (canonical activities) and `d4e5f6a7b8c9` (MSRP) are the reference implementations. (design_decisions E4, CLAUDE.md §9)

@@ -5,6 +5,18 @@
 
 ---
 
+## H2 — relocate completed plans to docs/archive/ + citation sweep — 2026-07-14
+
+**[CHANGED] Moved the 9 completed execution plans out of the repo root into `docs/archive/` and updated every path citation in the living docs. Docs-only; suite unchanged at 372. One `mx:` commit.**
+
+- **[CHANGED] `git mv` (blame-preserving) → `docs/archive/`:** `REDESIGN_PLAN.md`, `SECURITY_PASS_PLAN.md`, `TRAINING_DEPTH_PLAN.md`, `CHAT_PERSISTENCE_PLAN.md`, `REFACTOR_PLAN.md`, `UI_REVIEW_TASKS.md`, `STRAVA_IMPORT_REVIEW_TASKS.md`, `strava-historical-import-plan.md`, `documentation_creation.md`. The moved files' own bodies are untouched (append-only planning history, CLAUDE.md §13). Root now holds only the live docs: `CLAUDE.md`, `REMOTE_ACCESS_PLAN.md` (RA runbook), `CLAUDE_DESKTOP_SETUP.md`, `MAINTENANCE_PLAN.md`.
+- **[CHANGED] Citation sweep — path citations updated in the living reference docs** so `§N`/`P3.4`-style references still resolve: `architecture.md` (folder-tree diagram — which also still wrongly listed the H1-archived QUICKSTART/TROUBLESHOOTING at root — + the E7 threat-model pointer), `ai_context.md` (folder map + orientation + the "never change casually" auth pointer + the generation byline), `CLAUDE.md` §3, `design_decisions.md` (E1/E7 — 3 pointers), `roadmap.md` (R2.7 ×3, R5.6), `project_state.md` (convention + summary + debt bullet), `.claude/skills/add-frontend-page.md`, `.claude/commands/phase.md`, `REMOTE_ACCESS_PLAN.md`, `docs/archive/README.md` (H2 marked done).
+- **[CHANGED] Deliberately NOT rewritten (append-only history, CLAUDE.md §13):** the `docs/changelog.md` session entries and the dated `docs/documentation_review.md` deliverable that mention these plans by their old root path — those are historical names, not live navigation. Recorded in `docs/archive/README.md`.
+
+**[VERIFIED]** Post-sweep grep finds zero bare (non-`archive/`) citations in the living docs; no backend/frontend code references the moved files (they were only ever cited from Markdown). `.claude/worktrees/` (git-ignored, 0 tracked files) left untouched. Full suite **372 passing** (docs-only change).
+
+---
+
 ## Maintenance batch — unblocked MAINTENANCE_PLAN items (T3/T4/T6/T7/T8/T9) — 2026-07-14
 
 **[CHANGED] Six low-risk, RA1.5-unblocked maintenance tasks pulled from `MAINTENANCE_PLAN.md §2`. Suite 367 → 372 (+5: T3 ×4, T4 ×1). Six `mx:` commits, one per task.**

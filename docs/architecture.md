@@ -89,11 +89,13 @@ Dev-time coupling: the Vite dev server proxies `/api` to `127.0.0.1:8000` (expli
 ```
 running-shoe-deals/
 ├── CLAUDE.md                    # Claude development guide (conventions); the session log is docs/changelog.md
-├── QUICKSTART.md, TROUBLESHOOTING.md
-├── REDESIGN_PLAN.md, REFACTOR_PLAN.md, STRAVA_IMPORT_REVIEW_TASKS.md,
-│   UI_REVIEW_TASKS.md, strava-historical-import-plan.md   # Planning docs (the "§N" references in code comments)
+├── CLAUDE_DESKTOP_SETUP.md, MAINTENANCE_PLAN.md, REMOTE_ACCESS_PLAN.md   # live root docs (setup · maintenance queue · RA runbook)
 ├── docs/                        # The documentation suite (this file, domain_model, design_decisions, …)
-│                                #   + changelog.md — the session log (authoritative history, formerly root claude.md)
+│   │                            #   + changelog.md — the session log (authoritative history, formerly root claude.md)
+│   └── archive/                 # retired docs (QUICKSTART, TROUBLESHOOTING) + completed execution plans (H2, 2026-07-14):
+│                                #   REDESIGN_PLAN, REFACTOR_PLAN, TRAINING_DEPTH_PLAN, SECURITY_PASS_PLAN, CHAT_PERSISTENCE_PLAN,
+│                                #   UI_REVIEW_TASKS, STRAVA_IMPORT_REVIEW_TASKS, strava-historical-import-plan, documentation_creation
+│                                #   — the "§N"/"P3.4" references in code comments now resolve under docs/archive/
 ├── .claude/commands/            # Claude Code project commands (/project:migrate etc.)
 ├── .playwright-mcp/             # Browser-testing session artifacts (logs/snapshots; not app code)
 │
@@ -353,7 +355,7 @@ _Removed: RunAsYouAre (custom front-end), Adidas & Nike (bot-protected)._
 
 ## 11. Authentication & Security Posture
 
-**Authentication is a single shared bearer token (R2.1, shipped 2026-07-07 — design_decisions E7, supersedes E1).** Every request to `/api/*` and `/mcp` must carry `Authorization: Bearer <ANTON_SECRET>`; a mismatch or absence returns **401 with an empty body**. Enforced by one app-wide **pure-ASGI** middleware (`app/middleware/auth.py`) — pure-ASGI so SSE and the `/mcp` Streamable-HTTP stream pass through untouched, and app-wide so it covers the mounted `/mcp` sub-app without per-router work. The trust model it defends is an **untrusted process/person on the same LAN** (not the internet, not local root); full threat model and rejected alternatives in `SECURITY_PASS_PLAN.md`.
+**Authentication is a single shared bearer token (R2.1, shipped 2026-07-07 — design_decisions E7, supersedes E1).** Every request to `/api/*` and `/mcp` must carry `Authorization: Bearer <ANTON_SECRET>`; a mismatch or absence returns **401 with an empty body**. Enforced by one app-wide **pure-ASGI** middleware (`app/middleware/auth.py`) — pure-ASGI so SSE and the `/mcp` Streamable-HTTP stream pass through untouched, and app-wide so it covers the mounted `/mcp` sub-app without per-router work. The trust model it defends is an **untrusted process/person on the same LAN** (not the internet, not local root); full threat model and rejected alternatives in `docs/archive/SECURITY_PASS_PLAN.md`.
 
 Facts a due-diligence review must state plainly:
 

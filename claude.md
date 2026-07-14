@@ -70,7 +70,7 @@ docs/              the documentation suite + changelog.md
 - **phase `<name>`** — execute a named roadmap phase end to end, one commit per task, ending in S13.
 - **wrapup** — run the S13 session-wrapup skill to close a session (changelog, project_state, decisions, roadmap).
 
-Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Root planning docs (`REDESIGN_PLAN.md` etc.) are citable references — code comments cite them as `§N` / `P3.4`.
+Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Completed planning docs live under `docs/archive/` (`docs/archive/REDESIGN_PLAN.md` etc.) and remain citable references — code comments cite them as `§N` / `P3.4`. Live plan docs stay at the root (`REMOTE_ACCESS_PLAN.md`, `MAINTENANCE_PLAN.md`).
 
 ---
 
