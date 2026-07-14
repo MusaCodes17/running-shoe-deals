@@ -1,7 +1,29 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-07-14
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Defect Block A (D8 + D7) — 2026-07-14
+
+**[CHANGED] Scraper honesty: sold-out deals retired at qualification time (D8); kids/youth filter extended to URL handles and variant size labels (D7). No schema changes. Suite 323 → 352 (+29). Two `mx:` commits.**
+
+- **[CHANGED] `backend/app/scrapers/orchestrator.py` (D8 — OOS qualification guard):** `scrape_retailer_for_shoe` now requires BOTH `below_msrp AND is_stocked` before calling `upsert_deal`. When a product's price is below MSRP but `details['in_stock']` is False or `sizes_available` is empty, `deactivate_deal` runs instead — the deal is retired and requalifies automatically on the next scrape when stock returns. Previously `upsert_deal` was called unconditionally when `below_msrp`, leaving the deal active with `in_stock=False` in the DB and in the UI. `in_stock=True` is now hard-coded in the `upsert_deal` call (the guard already proves it).
+
+- **[CHANGED] `backend/app/scrapers/shopify_scraper.py` (D8 — pessimistic default):** `search_products` flipped the `available` default from `True` to `False` (i.e. `bool(p.get('available', False))`). The search endpoint's `available` field is unreliable — detail fetch is the authoritative source. Pessimistic default means a search result with no `available` key is treated as out-of-stock until the `.js` detail call confirms otherwise.
+
+- **[CHANGED] `backend/tests/test_orchestrator.py` (D8 — stale module comment updated + 3 new tests):** Module docstring corrected — D2/H2 was fixed in commit `bcdddc2`; the test was never actually xfail (the comment was stale from before the fix landed). Three new tests added under `# D8: out-of-stock qualification guard`: `test_out_of_stock_below_msrp_does_not_create_deal`, `test_out_of_stock_retires_existing_deal`, `test_stock_return_requalifies_retired_deal`.
+
+- **[CHANGED] `backend/app/scrapers/base_scraper.py` (D7a — composite kids filter):** `is_kids_shoe` changed from a single-text method to variadic `*texts: Optional[str]` — callers can now pass name AND product_url together; the check is a union (any match → kids). `search_products_filtered` updated to pass both `r.get('name')` and `r.get('product_url')`; previously only `name` was checked, so a JD Sports Shopify listing whose kids-ness lived in the URL handle (e.g. `/products/adidas-ultraboost-kids`) with an adult-looking title passed through.
+
+- **[CHANGED] `backend/app/scrapers/shopify_scraper.py` (D7b — youth-size exclusion):** Added `_YOUTH_SIZE_RE` class attribute and `_is_youth_size(label)` classmethod — matches labels like `"6Y"`, `"4.5C"`, `"10y"` case-insensitively (numeric + immediate Y/C suffix). Restructured the variant loop in `get_product_details`: the size label is now read FIRST for every available variant; any youth-suffix variant is skipped before adding to the price pool (`available_prices`) OR to `sizes_available`. Previously the price pool was populated before the label was read, so a $89 junior-size variant could set the deal price on an otherwise adult product and `extract_numeric_size("6Y") → "6"` silently added youth sizes to the adult size list.
+
+- **[ADDED] `backend/tests/test_kids_filter.py` — 26 new tests (D7):** Parametrised truth-table for `is_kids_shoe` (10 cases: name-only, URL-only, both-adult, GS token, youth in path, etc.); parametrised truth-table for `_is_youth_size` (12 cases: 6Y, 4.5C, 10y, 8c, plain adult, "11 US", empty, "Color: Black"); URL-handle filter integration test (`search_products_filtered` catches kids-in-URL); adult-listing pass-through test; Shopify detail scenarios: youth sizes excluded from `sizes_available`, youth-only product → `price=None`, mixed adult+youth product → adult price and sizes only.
+
+**D2 status confirmed:** D2 (partial detail-fetch orphan retirement) was fixed in commit `bcdddc2` (r2 session, 2026-07-08). The `test_partial_detail_failure_does_not_orphan_a_live_deal` test has been a real pass since then — not xfail. No code change needed; stale module comment updated.
+
+**[VERIFIED]** Suite **352 passing** (`backend/venv/bin/pytest tests/ -q`). 29 new tests (3 D8 orchestrator + 26 D7 kids filter) — all green on first run. No schema changes; no migration. No UI changes (`ShoeProductCard` already shows "Out of stock" badge when `in_stock === false`; that belt-and-braces was already in place). `vite build` not required this session.
 
 ---
 
