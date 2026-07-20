@@ -10,12 +10,15 @@ exactly one place business logic lives. Each tool opens its own DB session
 (FastMCP tools aren't FastAPI route handlers, so they can't use
 Depends(get_db)) and closes it when done, mirroring get_db's lifecycle.
 """
+import os
+
 from contextlib import contextmanager
 from typing import List, Optional
 
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.transport_security import TransportSecuritySettings
+
 from sqlalchemy import desc, func
 from sqlalchemy.orm import contains_eager
 
