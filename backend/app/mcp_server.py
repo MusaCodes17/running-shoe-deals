@@ -15,6 +15,7 @@ from typing import List, Optional
 
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import desc, func
 from sqlalchemy.orm import contains_eager
 
@@ -28,10 +29,27 @@ from app.scrapers.lock import ScrapeInProgressError, scrape_guard
 from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc, onboarding as onboarding_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
-# streamable_http_path="/" because the app this is mounted under (see
-# main.py) already adds the "/mcp" prefix — without this override the route
-# would only be reachable at the doubled-up "/mcp/mcp".
-mcp = FastMCP("anton", streamable_http_path="/")
+# DNS-rebinding protection (mcp SDK): the Streamable HTTP transport validates
+# the request Host against an allowlist defaulting to localhost only. Behind
+# Caddy the Host is the public domain, so it must be added explicitly or every
+# proxied request is rejected with 421 *before* reaching the app (hence no
+# access-log line). Localhost entries kept for dev/tests/health probe.
+_allowed_hosts = [h.strip() for h in os.getenv(
+    "ANTON_ALLOWED_HOSTS", "localhost,localhost:8000,127.0.0.1,127.0.0.1:8000"
+).split(",") if h.strip()]
+_allowed_origins = [o.strip() for o in os.getenv("ANTON_ALLOWED_ORIGINS", "").split(",") if o.strip()] \
+    or [f"https://{h}" for h in _allowed_hosts if ":" not in h]
+
+# streamable_http_path="/" because the app this is mounted under (main.py)
+# already adds the "/mcp" prefix — else the route is at the doubled "/mcp/mcp".
+mcp = FastMCP(
+    "anton",
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=_allowed_hosts,
+        allowed_origins=_allowed_origins,
+    ),
+)
 
 
 @contextmanager
